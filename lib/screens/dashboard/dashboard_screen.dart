@@ -1,99 +1,107 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/format.dart';
-import '../../data/mock_data.dart';
+import '../../core/network/api_client.dart';
+import '../../data/snr_repository.dart';
 import '../../models/creance.dart';
 import '../../widgets/kpi_card.dart';
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final creances = MockData.creances;
-    final confie = creances.fold<int>(0, (sum, c) => sum + c.montantTotal);
-    final recouvre = creances.fold<int>(0, (sum, c) => sum + (c.montantTotal - c.soldeRestant));
-    final encours = creances.fold<int>(0, (sum, c) => sum + c.soldeRestant);
-    final enContentieux = creances.where((c) => c.phase == PhaseCreance.contentieux).length;
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: 1.3,
-          children: [
-            KpiCard(
-              label: 'Montant confié',
-              value: formatFcfa(confie),
-              icon: Icons.account_balance_wallet_outlined,
-              color: Colors.indigo,
-            ),
-            KpiCard(
-              label: 'Montant recouvré',
-              value: formatFcfa(recouvre),
-              icon: Icons.trending_up,
-              color: Colors.green,
-              trend: '+12 % / mois',
-            ),
-            KpiCard(
-              label: 'Encours',
-              value: formatFcfa(encours),
-              icon: Icons.hourglass_bottom,
-              color: Colors.orange,
-            ),
-            KpiCard(
-              label: 'Dossiers en contentieux',
-              value: '$enContentieux',
-              icon: Icons.gavel_outlined,
-              color: Colors.red,
-            ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        const Text('Répartition par phase', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        const SizedBox(height: 10),
-        Card(
-          child: Padding(
+class _DashboardScreenState extends State<DashboardScreen> {
+  final _repo = SnrRepository.instance;
+  late Future<void> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _repo.creances.isEmpty ? _repo.refreshAll() : Future.value();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          final msg = snapshot.error is ApiException ? (snapshot.error as ApiException).message : 'Erreur de chargement du tableau de bord.';
+          return Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(msg, textAlign: TextAlign.center), const SizedBox(height: 12),
+            FilledButton(onPressed: () => setState(() => _future = _repo.refreshAll()), child: const Text('Réessayer')),
+          ])));
+        }
+        final creances = _repo.creances;
+        final confie = creances.fold<int>(0, (sum, c) => sum + c.montantTotal);
+        final recouvre = creances.fold<int>(0, (sum, c) => sum + (c.montantTotal - c.soldeRestant));
+        final encours = creances.fold<int>(0, (sum, c) => sum + c.soldeRestant);
+        final enContentieux = creances.where((c) => c.phase == PhaseCreance.contentieux).length;
+
+        return RefreshIndicator(
+          onRefresh: () async { await _repo.refreshAll(); if (mounted) setState(() {}); },
+          child: ListView(
             padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                for (final phase in PhaseCreance.values)
-                  _PhaseBar(
-                    label: phase.libelle,
-                    count: creances.where((c) => c.phase == phase).length,
-                    total: creances.length,
-                  ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        const Text('Encaissements mensuels (FCFA)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        const SizedBox(height: 10),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: SizedBox(
-              height: 140,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: const [
-                  _MonthBar('Juil.', 0.5),
-                  _MonthBar('Août', 0.65),
-                  _MonthBar('Sept.', 0.45),
-                  _MonthBar('Oct.', 0.8),
-                  _MonthBar('Nov.', 0.95),
+            children: [
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: 1.3,
+                children: [
+                  KpiCard(label: 'Montant confié', value: formatFcfa(confie), icon: Icons.account_balance_wallet_outlined, color: Colors.indigo),
+                  KpiCard(label: 'Montant recouvré', value: formatFcfa(recouvre), icon: Icons.trending_up, color: Colors.green),
+                  KpiCard(label: 'Encours', value: formatFcfa(encours), icon: Icons.hourglass_bottom, color: Colors.orange),
+                  KpiCard(label: 'Dossiers en contentieux', value: '$enContentieux', icon: Icons.gavel_outlined, color: Colors.red),
                 ],
               ),
-            ),
+              const SizedBox(height: 20),
+              const Text('Répartition par phase', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 10),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      for (final phase in PhaseCreance.values)
+                        _PhaseBar(label: phase.libelle, count: creances.where((c) => c.phase == phase).length, total: creances.length),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text('Encaissements mensuels (FCFA)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+              const SizedBox(height: 10),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: SizedBox(
+                    height: 140,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: const [
+                        _MonthBar('Juil.', 0.5),
+                        _MonthBar('Août', 0.65),
+                        _MonthBar('Sept.', 0.45),
+                        _MonthBar('Oct.', 0.8),
+                        _MonthBar('Nov.', 0.95),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 }

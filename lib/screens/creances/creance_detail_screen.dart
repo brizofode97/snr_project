@@ -1,58 +1,82 @@
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/format.dart';
-import '../../data/mock_data.dart';
+import '../../core/network/api_client.dart';
+import '../../data/snr_repository.dart';
 import '../../models/creance.dart';
 import '../../models/echeancier.dart';
 import '../../widgets/empty_placeholder.dart';
 import '../../widgets/status_badge.dart';
 
-class CreanceDetailScreen extends StatelessWidget {
+class CreanceDetailScreen extends StatefulWidget {
   final String creanceId;
 
   const CreanceDetailScreen({super.key, required this.creanceId});
 
   @override
-  Widget build(BuildContext context) {
-    final creance = MockData.creanceParId(creanceId);
-    if (creance == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Créance')),
-        body: const EmptyPlaceholder(message: 'Créance introuvable.'),
-      );
-    }
-    final debiteur = MockData.debiteurParId(creance.debiteurId);
+  State<CreanceDetailScreen> createState() => _CreanceDetailScreenState();
+}
 
-    return DefaultTabController(
-      length: 7,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(creance.reference),
-          bottom: const TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: 'Synthèse'),
-              Tab(text: 'Financier'),
-              Tab(text: 'Échéancier'),
-              Tab(text: 'Chronologie'),
-              Tab(text: 'Documents'),
-              Tab(text: 'Garanties'),
-              Tab(text: 'Actions'),
-            ],
+class _CreanceDetailScreenState extends State<CreanceDetailScreen> {
+  late Future<Creance> _future;
+  final _repo = SnrRepository.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _repo.fetchCreance(widget.creanceId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Creance>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(appBar: AppBar(title: const Text('Créance')), body: const Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError) {
+          final msg = snapshot.error is ApiException ? (snapshot.error as ApiException).message : 'Erreur de chargement.';
+          return Scaffold(
+            appBar: AppBar(title: const Text('Créance')),
+            body: Center(child: Padding(padding: const EdgeInsets.all(24), child: Text(msg, textAlign: TextAlign.center))),
+          );
+        }
+        final creance = snapshot.data!;
+        final debiteur = _repo.debiteurParId(creance.debiteurId);
+
+        return DefaultTabController(
+          length: 7,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(creance.reference),
+              bottom: const TabBar(
+                isScrollable: true,
+                tabs: [
+                  Tab(text: 'Synthèse'),
+                  Tab(text: 'Financier'),
+                  Tab(text: 'Échéancier'),
+                  Tab(text: 'Chronologie'),
+                  Tab(text: 'Documents'),
+                  Tab(text: 'Garanties'),
+                  Tab(text: 'Actions'),
+                ],
+              ),
+            ),
+            body: TabBarView(
+              children: [
+                _SyntheseTab(creance: creance, debiteurNom: debiteur?.nom ?? 'Inconnu'),
+                _FinancierTab(creance: creance),
+                _EcheancierTab(creanceId: creance.id),
+                _ChronologieTab(creance: creance),
+                _DocumentsTab(creance: creance),
+                _GarantiesTab(creance: creance),
+                const _ActionsTab(),
+              ],
+            ),
           ),
-        ),
-        body: TabBarView(
-          children: [
-            _SyntheseTab(creance: creance, debiteurNom: debiteur?.nom ?? 'Inconnu'),
-            _FinancierTab(creance: creance),
-            _EcheancierTab(creanceId: creance.id),
-            _ChronologieTab(creance: creance),
-            _DocumentsTab(creance: creance),
-            _GarantiesTab(creance: creance),
-            const _ActionsTab(),
-          ],
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -180,11 +204,10 @@ class _EcheancierTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final echeancier = MockData.echeanciers.where((e) => e.creanceId == creanceId).toList();
-    if (echeancier.isEmpty) {
+    final e = SnrRepository.instance.echeancierParCreanceId(creanceId);
+    if (e == null) {
       return const EmptyPlaceholder(message: 'Aucun échéancier pour cette créance.');
     }
-    final e = echeancier.first;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [

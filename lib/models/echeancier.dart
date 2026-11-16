@@ -15,6 +15,22 @@ extension StatutEcheancierLabel on StatutEcheancier {
   }
 }
 
+StatutEcheancier statutEcheancierFromApi(String? v) {
+  switch ((v ?? '').toLowerCase()) {
+    case 'validé':
+    case 'valide':
+      return StatutEcheancier.valide;
+    case 'rejeté':
+    case 'rejete':
+      return StatutEcheancier.rejete;
+    case 'remplacé':
+    case 'remplace':
+      return StatutEcheancier.remplace;
+    default:
+      return StatutEcheancier.soumis;
+  }
+}
+
 class EcheanceLigne {
   final int numero;
   final DateTime dateLimite;
@@ -27,6 +43,13 @@ class EcheanceLigne {
     required this.montant,
     this.payee = false,
   });
+
+  factory EcheanceLigne.fromApi(Map<String, dynamic> m, int idx) => EcheanceLigne(
+        numero: (m['n'] ?? m['numero'] ?? idx + 1) as int,
+        dateLimite: DateTime.tryParse((m['date'] ?? m['dateLimite'] ?? '').toString()) ?? DateTime.now(),
+        montant: (m['montant'] is num) ? (m['montant'] as num).toInt() : int.tryParse('${m['montant']}') ?? 0,
+        payee: (m['statut']?.toString() == 'Payée') || m['payee'] == true,
+      );
 }
 
 class Echeancier {
@@ -53,4 +76,22 @@ class Echeancier {
     required this.statut,
     this.echeances = const [],
   });
+
+  factory Echeancier.fromApi(Map<String, dynamic> m) {
+    final lignes = (m['lignes'] as List? ?? m['echeances'] as List? ?? [])
+        .whereType<Map>()
+        .toList();
+    return Echeancier(
+      id: (m['id'] ?? '').toString(),
+      creanceId: (m['creanceId'] ?? '').toString(),
+      debiteurNom: (m['debiteurNom'] ?? '').toString(),
+      version: (m['version'] is num) ? (m['version'] as num).toInt() : 1,
+      montantTotal: (m['montant'] is num) ? (m['montant'] as num).toInt() : int.tryParse('${m['montantTotal'] ?? m['montant']}') ?? 0,
+      acompte: (m['acompte'] is num) ? (m['acompte'] as num).toInt() : 0,
+      nombreEcheances: (m['nb'] is num) ? (m['nb'] as num).toInt() : int.tryParse('${m['nombreEcheances']}') ?? lignes.length,
+      frequence: (m['frequence'] ?? '').toString(),
+      statut: statutEcheancierFromApi(m['statut']?.toString()),
+      echeances: [for (int i = 0; i < lignes.length; i++) EcheanceLigne.fromApi(Map<String, dynamic>.from(lignes[i]), i)],
+    );
+  }
 }

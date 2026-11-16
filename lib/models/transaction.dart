@@ -17,6 +17,25 @@ extension StatutTransactionLabel on StatutTransaction {
   }
 }
 
+StatutTransaction statutTransactionFromApi(String? v) {
+  switch ((v ?? '').toLowerCase()) {
+    case 'confirmé':
+    case 'confirme':
+      return StatutTransaction.confirme;
+    case 'en attente de confirmation':
+    case 'en attente':
+      return StatutTransaction.enAttente;
+    case 'non identifié':
+    case 'non identifie':
+      return StatutTransaction.nonIdentifie;
+    case 'rejeté':
+    case 'rejete':
+      return StatutTransaction.rejete;
+    default:
+      return StatutTransaction.justificatifDepose;
+  }
+}
+
 class Transaction {
   final String id;
   final String reference;
@@ -39,6 +58,18 @@ class Transaction {
     required this.statut,
     this.comptabilise = false,
   });
+
+  factory Transaction.fromApi(Map<String, dynamic> m) => Transaction(
+        id: (m['id'] ?? '').toString(),
+        reference: (m['ref'] ?? m['reference'] ?? '').toString(),
+        date: DateTime.tryParse((m['date'] ?? '').toString()) ?? DateTime.now(),
+        canal: (m['canal'] ?? '').toString(),
+        montant: (m['montant'] is num) ? (m['montant'] as num).toInt() : int.tryParse('${m['montant']}') ?? 0,
+        payeur: (m['payeur'] ?? '').toString(),
+        creanceId: m['creanceId']?.toString(),
+        statut: statutTransactionFromApi(m['statut']?.toString()),
+        comptabilise: m['comptabilise'] == true,
+      );
 }
 
 enum StatutReversement { aPreparer, prepare, valide, paye }
