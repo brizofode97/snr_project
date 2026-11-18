@@ -31,7 +31,16 @@ class Debiteur {
     final ids = m['ids'];
     String ident = '';
     if (ids is Map) {
-      ident = (ids['cni'] ?? ids['ninea'] ?? ids['rccm'] ?? ids.values.firstOrNull ?? '').toString();
+      final normalised = <String, dynamic>{
+        for (final entry in ids.entries)
+          entry.key.toString().toLowerCase(): entry.value,
+      };
+      ident = (normalised['cni'] ??
+              normalised['ninea'] ??
+              normalised['rccm'] ??
+              ids.values.firstOrNull ??
+              '')
+          .toString();
     }
     final acces = m['acces']?.toString();
     return Debiteur(

@@ -47,4 +47,51 @@ class ActeContentieux {
     required this.echeanceDelai,
     this.circuitVisa = const [],
   });
+
+  static StatutActe statutFromApi(String? value) {
+    switch ((value ?? '').toLowerCase()) {
+      case 'signé':
+      case 'signe':
+        return StatutActe.signe;
+      case 'notifié':
+      case 'notifie':
+        return StatutActe.notifie;
+      case 'terminé':
+      case 'termine':
+      case 'clos':
+        return StatutActe.clos;
+      default:
+        return StatutActe.enPreparation;
+    }
+  }
+
+  factory ActeContentieux.fromApi(Map<String, dynamic> m) {
+    final circuit = m['circuitEtat']?.toString();
+    final statut = statutFromApi(m['statut']?.toString());
+    return ActeContentieux(
+      id: (m['id'] ?? '').toString(),
+      type: (m['typeLibelle'] ?? m['type'] ?? '').toString(),
+      creanceId: (m['creanceId'] ?? '').toString(),
+      debiteurNom: (m['debiteurNom'] ?? '').toString(),
+      statut: circuit == 'EN_COURS' && statut == StatutActe.enPreparation
+          ? StatutActe.enCircuitVisa
+          : statut,
+      dateSignature: DateTime.tryParse((m['dateSignature'] ?? '').toString()),
+      dateNotification: DateTime.tryParse((m['dateNotification'] ?? '').toString()),
+      echeanceDelai: DateTime.tryParse((m['dateEcheanceDelai'] ?? '').toString()) ??
+          DateTime.now(),
+    );
+  }
+
+  ActeContentieux copyWith({List<EtapeVisa>? circuitVisa}) => ActeContentieux(
+        id: id,
+        type: type,
+        creanceId: creanceId,
+        debiteurNom: debiteurNom,
+        statut: statut,
+        dateSignature: dateSignature,
+        dateNotification: dateNotification,
+        echeanceDelai: echeanceDelai,
+        circuitVisa: circuitVisa ?? this.circuitVisa,
+      );
 }

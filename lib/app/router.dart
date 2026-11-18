@@ -1,7 +1,10 @@
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../core/auth/auth_service.dart';
+import '../screens/accueil/accueil_screen.dart';
 import '../screens/administration/administration_screen.dart';
+import '../screens/auth/login_screen.dart';
 import '../screens/agent/agent_espace_screen.dart';
 import '../screens/contentieux/acte_detail_screen.dart';
 import '../screens/contentieux/contentieux_list_screen.dart';
@@ -32,11 +35,28 @@ import 'app_shell.dart';
 
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
+  refreshListenable: AuthService.instance.session,
+  redirect: (context, state) {
+    final connecte = AuthService.instance.isAuthenticated;
+    final location = state.matchedLocation;
+    final estPublic = location == '/' || location == '/login';
+    if (!connecte && !estPublic) return '/login';
+    if (connecte && estPublic) return '/home';
+    return null;
+  },
   routes: [
+    GoRoute(
+      path: '/',
+      builder: (context, state) => const AccueilScreen(),
+    ),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const LoginScreen(),
+    ),
     ShellRoute(
       builder: (context, state, child) => AppShell(path: state.matchedLocation, child: child),
       routes: [
-        GoRoute(path: '/', builder: (context, state) => const HomeHubScreen()),
+        GoRoute(path: '/home', builder: (context, state) => const HomeHubScreen()),
         GoRoute(path: '/dashboard', builder: (context, state) => const DashboardScreen()),
         GoRoute(path: '/creances', builder: (context, state) => const CreancesListScreen()),
         GoRoute(path: '/debiteurs', builder: (context, state) => const DebiteursListScreen()),

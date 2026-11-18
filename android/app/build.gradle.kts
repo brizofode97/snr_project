@@ -27,6 +27,8 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Schéma de redirection enregistré pour le flux Keycloak (Authorization Code + PKCE).
+        manifestPlaceholders += mapOf("appAuthRedirectScheme" to "snr360")
     }
 
     buildTypes {

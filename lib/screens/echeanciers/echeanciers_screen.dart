@@ -2,41 +2,92 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/format.dart';
-import '../../data/mock_data.dart';
+import '../../core/network/api_client.dart';
+import '../../data/snr_repository.dart';
 import '../../models/echeancier.dart';
 import '../../widgets/empty_placeholder.dart';
 import '../../widgets/status_badge.dart';
 
-class EcheanciersScreen extends StatelessWidget {
+class EcheanciersScreen extends StatefulWidget {
   const EcheanciersScreen({super.key});
 
   @override
+  State<EcheanciersScreen> createState() => _EcheanciersScreenState();
+}
+
+class _EcheanciersScreenState extends State<EcheanciersScreen> {
+  late Future<void> _future;
+  final _repo = SnrRepository.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _repo.echeanciers.isEmpty ? _repo.refreshAll() : Future.value();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      child: Column(
-        children: [
-          Material(
-            color: Theme.of(context).colorScheme.primary,
-            child: const TabBar(
-              tabs: [
-                Tab(text: 'À valider'),
-                Tab(text: 'En vigueur'),
-                Tab(text: 'Historique'),
-              ],
+    return FutureBuilder<void>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          final msg = snapshot.error is ApiException
+              ? (snapshot.error as ApiException).message
+              : 'Erreur de chargement des échéanciers.';
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(msg, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () =>
+                        setState(() => _future = _repo.refreshAll()),
+                    child: const Text('Réessayer'),
+                  ),
+                ],
+              ),
             ),
+          );
+        }
+
+        return DefaultTabController(
+          length: 3,
+          child: Column(
+            children: [
+              Material(
+                color: Theme.of(context).colorScheme.primary,
+                child: const TabBar(
+                  tabs: [
+                    Tab(text: 'À valider'),
+                    Tab(text: 'En vigueur'),
+                    Tab(text: 'Historique'),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _EcheancierListe(statuts: const [StatutEcheancier.soumis]),
+                    _EcheancierListe(statuts: const [StatutEcheancier.valide]),
+                    _EcheancierListe(
+                      statuts: const [
+                        StatutEcheancier.rejete,
+                        StatutEcheancier.remplace,
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: TabBarView(
-              children: [
-                _EcheancierListe(statuts: const [StatutEcheancier.soumis]),
-                _EcheancierListe(statuts: const [StatutEcheancier.valide]),
-                _EcheancierListe(statuts: const [StatutEcheancier.rejete, StatutEcheancier.remplace]),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -61,9 +112,13 @@ class _EcheancierListe extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final liste = MockData.echeanciers.where((e) => statuts.contains(e.statut)).toList();
+    final liste = SnrRepository.instance.echeanciers
+        .where((e) => statuts.contains(e.statut))
+        .toList();
     if (liste.isEmpty) {
-      return const EmptyPlaceholder(message: 'Aucun échéancier dans cette catégorie.');
+      return const EmptyPlaceholder(
+        message: 'Aucun échéancier dans cette catégorie.',
+      );
     }
     return ListView.separated(
       padding: const EdgeInsets.all(16),
@@ -75,8 +130,13 @@ class _EcheancierListe extends StatelessWidget {
           child: ListTile(
             onTap: () => context.push('/echeanciers/${e.id}'),
             title: Text(e.debiteurNom),
-            subtitle: Text('${e.nombreEcheances} échéances · ${formatFcfa(e.montantTotal)}'),
-            trailing: StatusBadge(label: e.statut.libelle, color: _couleur(e.statut)),
+            subtitle: Text(
+              '${e.nombreEcheances} échéances · ${formatFcfa(e.montantTotal)}',
+            ),
+            trailing: StatusBadge(
+              label: e.statut.libelle,
+              color: _couleur(e.statut),
+            ),
           ),
         );
       },

@@ -1,84 +1,169 @@
+import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/format.dart';
-import '../../data/mock_data.dart';
+import '../../core/auth/auth_service.dart';
+import '../../core/network/api_client.dart';
+import '../../data/snr_repository.dart';
 import '../../models/creance.dart';
 import '../../widgets/empty_placeholder.dart';
 import '../../widgets/status_badge.dart';
 
-class PortailDebiteurScreen extends StatelessWidget {
+class PortailDebiteurScreen extends StatefulWidget {
   const PortailDebiteurScreen({super.key});
 
   @override
+  State<PortailDebiteurScreen> createState() => _PortailDebiteurScreenState();
+}
+
+class _PortailDebiteurScreenState extends State<PortailDebiteurScreen> {
+  final _repo = SnrRepository.instance;
+  late Future<void> _future;
+  String _debiteurId = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  Future<void> _load() async {
+    await _repo.refreshAll();
+    var id = AuthService.instance.currentUser?.debiteurId;
+    if (id == null || id.isEmpty) {
+      if (_repo.debiteurs.isNotEmpty) {
+        id = _repo.debiteurs.first.id;
+      } else if (_repo.creances.isNotEmpty) {
+        id = _repo.creances.first.debiteurId;
+      }
+    }
+    _debiteurId = id ?? '';
+    await _repo.refreshMessages(
+      debiteurId: _debiteurId.isEmpty ? null : _debiteurId,
+    );
+  }
+
+  String _greeting() {
+    final user = AuthService.instance.currentUser;
+    final prenom = user?.prenom ?? '';
+    final nom = user?.nom ?? '';
+    final nomComplet = '$prenom $nom'.trim();
+    return nomComplet.isEmpty ? _repo.debiteurNom(_debiteurId) : nomComplet;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 4,
-      child: Column(
-        children: [
-          Material(
-            color: Theme.of(context).colorScheme.primary,
-            child: const TabBar(
-              isScrollable: true,
-              tabs: [
-                Tab(text: 'Accueil'),
-                Tab(text: 'Payer'),
-                Tab(text: 'Demandes'),
-                Tab(text: 'Messages'),
-              ],
+    return FutureBuilder<void>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          final msg = snapshot.error is ApiException
+              ? (snapshot.error as ApiException).message
+              : 'Erreur de chargement du portail débiteur.';
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(msg, textAlign: TextAlign.center),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: () => setState(() => _future = _load()),
+                    child: const Text('Réessayer'),
+                  ),
+                ],
+              ),
             ),
+          );
+        }
+        return DefaultTabController(
+          length: 4,
+          child: Column(
+            children: [
+              Material(
+                color: Theme.of(context).colorScheme.primary,
+                child: const TabBar(
+                  isScrollable: true,
+                  tabs: [
+                    Tab(text: 'Accueil'),
+                    Tab(text: 'Payer'),
+                    Tab(text: 'Demandes'),
+                    Tab(text: 'Messages'),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _AccueilTab(
+                      greeting: _greeting(),
+                      dossiers: _repo.creancesDuDebiteur(_debiteurId),
+                    ),
+                    const _PayerTab(),
+                    const _DemandesTab(),
+                    _MessagesTab(debiteurId: _debiteurId),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const Expanded(
-            child: TabBarView(
-              children: [
-                _AccueilTab(),
-                _PayerTab(),
-                _DemandesTab(),
-                _MessagesTab(),
-              ],
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
 class _AccueilTab extends StatelessWidget {
-  const _AccueilTab();
+  final String greeting;
+  final List<Creance> dossiers;
+
+  const _AccueilTab({required this.greeting, required this.dossiers});
 
   @override
   Widget build(BuildContext context) {
-    final mesDossiers = MockData.creancesDuDebiteur('d1');
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const Text('Bonjour Moussa Diop', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(
+          'Bonjour $greeting',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
         const SizedBox(height: 4),
-        Text('Vous avez ${mesDossiers.length} dossier(s) en cours.', style: TextStyle(color: Colors.grey.shade600)),
+        Text(
+          'Vous avez ${dossiers.length} dossier(s) en cours.',
+          style: TextStyle(color: Colors.grey.shade600),
+        ),
         const SizedBox(height: 16),
-        for (final c in mesDossiers)
+        for (final c in dossiers)
           Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(c.reference, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      StatusBadge(label: c.situation.libelle, color: Colors.blueGrey),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(c.nature),
-                  const SizedBox(height: 6),
-                  Text('Solde restant : ${formatFcfa(c.soldeRestant)}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                ],
+            child: InkWell(
+              onTap: () => context.push('/creances/${c.id}'),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(c.reference, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        StatusBadge(label: c.situation.libelle, color: Colors.blueGrey),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(c.nature),
+                    const SizedBox(height: 6),
+                    Text('Solde restant : ${formatFcfa(c.soldeRestant)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ),
               ),
             ),
           ),
-        if (mesDossiers.isEmpty) const EmptyPlaceholder(message: 'Aucun dossier.'),
+        if (dossiers.isEmpty) const EmptyPlaceholder(message: 'Aucun dossier.'),
       ],
     );
   }
@@ -120,7 +205,7 @@ class _PayerTabState extends State<_PayerTab> {
         ElevatedButton.icon(
           onPressed: () {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Paiement via $_canal — maquette visuelle uniquement')),
+              SnackBar(content: Text('Paiement via $_canal traité par le parcours sécurisé du portail backend.')),
             );
           },
           icon: const Icon(Icons.payment_outlined),
@@ -152,7 +237,11 @@ class _DemandesTab extends StatelessWidget {
             leading: Icon(icon),
             title: Text(label),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () {},
+            onTap: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('$label traitée par le parcours sécurisé du portail backend.')),
+              );
+            },
           ),
         );
       },
@@ -160,51 +249,96 @@ class _DemandesTab extends StatelessWidget {
   }
 }
 
-class _MessagesTab extends StatelessWidget {
-  const _MessagesTab();
+class _MessagesTab extends StatefulWidget {
+  final String debiteurId;
+
+  const _MessagesTab({required this.debiteurId});
+
+  @override
+  State<_MessagesTab> createState() => _MessagesTabState();
+}
+
+class _MessagesTabState extends State<_MessagesTab> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _envoyer() async {
+    final texte = _controller.text.trim();
+    if (texte.isEmpty) return;
+    try {
+      await SnrRepository.instance.sendMessage(<String, dynamic>{
+        'texte': texte,
+        'debiteurId': widget.debiteurId,
+      });
+      await SnrRepository.instance.refreshMessages(debiteurId: widget.debiteurId);
+      _controller.clear();
+      if (!mounted) return;
+      setState(() {});
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erreur lors de l\'envoi du message.')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final messages = SnrRepository.instance.messages;
     return Column(
       children: [
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: MockData.messagesDebiteur.length,
-            itemBuilder: (context, index) {
-              final m = MockData.messagesDebiteur[index];
-              return Align(
-                alignment: m.deMoi ? Alignment.centerRight : Alignment.centerLeft,
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  constraints: const BoxConstraints(maxWidth: 280),
-                  decoration: BoxDecoration(
-                    color: m.deMoi ? Colors.blue.shade50 : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(m.contenu),
-                      const SizedBox(height: 4),
-                      Text(formatDate(m.date), style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
-                    ],
-                  ),
+          child: messages.isEmpty
+              ? const EmptyPlaceholder(message: 'Aucun message.')
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: messages.length,
+                  itemBuilder: (context, index) {
+                    final m = messages[index];
+                    return Align(
+                      alignment: m.deMoi ? Alignment.centerRight : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(12),
+                        constraints: const BoxConstraints(maxWidth: 280),
+                        decoration: BoxDecoration(
+                          color: m.deMoi ? Colors.blue.shade50 : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(m.contenu),
+                            const SizedBox(height: 4),
+                            Text(formatDate(m.date), style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              const Expanded(
-                child: TextField(decoration: InputDecoration(hintText: 'Écrire un message...', border: OutlineInputBorder())),
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  decoration: const InputDecoration(hintText: 'Écrire un message...', border: OutlineInputBorder()),
+                  onSubmitted: (_) => _envoyer(),
+                ),
               ),
               const SizedBox(width: 8),
-              IconButton.filled(onPressed: () {}, icon: const Icon(Icons.send)),
+              IconButton.filled(onPressed: _envoyer, icon: const Icon(Icons.send)),
             ],
           ),
         ),

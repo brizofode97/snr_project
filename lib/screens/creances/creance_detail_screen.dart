@@ -309,7 +309,9 @@ class _DocumentsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final docs = MockData.documents.where((d) => creance.documentIds.contains(d.id)).toList();
+    final docs = SnrRepository.instance.documents
+        .where((d) => creance.documentIds.contains(d.id))
+        .toList();
     if (docs.isEmpty) {
       return const EmptyPlaceholder(message: 'Aucun document rattaché.', icon: Icons.folder_open_outlined);
     }

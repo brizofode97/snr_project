@@ -1,6 +1,7 @@
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../app/navigation_history.dart';
 import '../../app/theme.dart';
 import '../../widgets/app_drawer.dart';
 
@@ -31,7 +32,7 @@ class HomeHubScreen extends StatelessWidget {
               ),
               SizedBox(height: 6),
               Text(
-                'Maquette de navigation — toutes les pages sont accessibles librement, sans connexion.',
+                'Retrouvez tous les modules de la SNR 360 depuis votre espace sécurisé.',
                 style: TextStyle(color: Colors.white, fontSize: 13),
               ),
             ],
@@ -69,7 +70,10 @@ class _ShortcutCard extends StatelessWidget {
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () => context.go(entry.path),
+        onTap: () {
+          navigationHistory.push('/home');
+          context.go(entry.path);
+        },
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Column(

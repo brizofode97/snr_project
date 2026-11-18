@@ -1,7 +1,9 @@
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../app/navigation_history.dart';
 import '../app/theme.dart';
+import '../core/auth/auth_service.dart';
 
 class DrawerEntry {
   final String path;
@@ -63,47 +65,77 @@ class AppDrawer extends StatelessWidget {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            Container(
-              padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [snrGradientStart, snrAccent],
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
-                    ),
-                    child: const Text(
-                      '360',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+            ValueListenableBuilder(
+              valueListenable: AuthService.instance.session,
+              builder: (context, session, _) {
+                final user = session?.user;
+                return Container(
+                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [snrGradientStart, snrAccent],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text('SNR 360', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-                      Text('Recouvrement des créances', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      Container(
+                        width: 48,
+                        height: 48,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+                        ),
+                        child: Text(
+                          user == null
+                              ? '360'
+                              : user.displayName.substring(0, 1).toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              user?.displayName ?? 'SNR 360',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            Text(
+                              user == null
+                                  ? 'Recouvrement des créances'
+                                  : '${user.profil} · ${user.email ?? user.username}',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                ],
-              ),
+                );
+              },
             ),
             ListTile(
               leading: const Icon(Icons.home_outlined),
               title: const Text('Accueil'),
-              selected: currentPath == '/',
-              onTap: () => _navigate(context, '/'),
+              selected: currentPath == '/home',
+              onTap: () => _navigate(context, '/home'),
             ),
             for (final section in drawerSections) ...[
               Padding(
@@ -126,6 +158,12 @@ class AppDrawer extends StatelessWidget {
                   onTap: () => _navigate(context, entry.path),
                 ),
             ],
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Se déconnecter'),
+              onTap: () => _deconnecter(context),
+            ),
             const SizedBox(height: 12),
           ],
         ),
@@ -134,7 +172,17 @@ class AppDrawer extends StatelessWidget {
   }
 
   void _navigate(BuildContext context, String path) {
+    final router = GoRouter.of(context);
     Navigator.of(context).pop();
-    context.go(path);
+    navigationHistory.push(currentPath);
+    router.go(path);
+  }
+
+  Future<void> _deconnecter(BuildContext context) async {
+    final router = GoRouter.of(context);
+    Navigator.of(context).pop();
+    await AuthService.instance.logout();
+    navigationHistory.reset();
+    router.go('/login');
   }
 }

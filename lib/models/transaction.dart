@@ -59,17 +59,30 @@ class Transaction {
     this.comptabilise = false,
   });
 
-  factory Transaction.fromApi(Map<String, dynamic> m) => Transaction(
-        id: (m['id'] ?? '').toString(),
-        reference: (m['ref'] ?? m['reference'] ?? '').toString(),
-        date: DateTime.tryParse((m['date'] ?? '').toString()) ?? DateTime.now(),
-        canal: (m['canal'] ?? '').toString(),
-        montant: (m['montant'] is num) ? (m['montant'] as num).toInt() : int.tryParse('${m['montant']}') ?? 0,
-        payeur: (m['payeur'] ?? '').toString(),
-        creanceId: m['creanceId']?.toString(),
-        statut: statutTransactionFromApi(m['statut']?.toString()),
-        comptabilise: m['comptabilise'] == true,
-      );
+  factory Transaction.fromApi(Map<String, dynamic> m) {
+    final affectations = m['affectations'];
+    String? creanceId = m['creanceId']?.toString();
+    if ((creanceId == null || creanceId.isEmpty) && affectations is List) {
+      for (final item in affectations) {
+        if (item is Map && item['creanceId'] != null) {
+          creanceId = item['creanceId'].toString();
+          break;
+        }
+      }
+    }
+    creanceId ??= m['cibleCreance']?.toString();
+    return Transaction(
+      id: (m['id'] ?? '').toString(),
+      reference: (m['ref'] ?? m['reference'] ?? '').toString(),
+      date: DateTime.tryParse((m['date'] ?? '').toString()) ?? DateTime.now(),
+      canal: (m['canal'] ?? '').toString(),
+      montant: (m['montant'] is num) ? (m['montant'] as num).toInt() : int.tryParse('${m['montant']}') ?? 0,
+      payeur: (m['payeur'] ?? '').toString(),
+      creanceId: creanceId,
+      statut: statutTransactionFromApi(m['statut']?.toString()),
+      comptabilise: m['comptabilise'] == true,
+    );
+  }
 }
 
 enum StatutReversement { aPreparer, prepare, valide, paye }
@@ -103,4 +116,30 @@ class Reversement {
     required this.montant,
     required this.statut,
   });
+
+  static StatutReversement statutFromApi(String? value) {
+    switch ((value ?? '').toLowerCase()) {
+      case 'payé':
+      case 'paye':
+        return StatutReversement.paye;
+      case 'validé':
+      case 'valide':
+        return StatutReversement.valide;
+      case 'préparé':
+      case 'prepare':
+        return StatutReversement.prepare;
+      default:
+        return StatutReversement.aPreparer;
+    }
+  }
+
+  factory Reversement.fromApi(Map<String, dynamic> m) => Reversement(
+        id: (m['key'] ?? m['id'] ?? '').toString(),
+        mandant: (m['mandant'] ?? m['mandantId'] ?? '').toString(),
+        mois: (m['mois'] ?? '').toString(),
+        montant: (m['net'] is num)
+            ? (m['net'] as num).toInt()
+            : int.tryParse('${m['montant'] ?? m['net']}') ?? 0,
+        statut: statutFromApi(m['statut']?.toString()),
+      );
 }

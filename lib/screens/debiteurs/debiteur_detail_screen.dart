@@ -25,7 +25,29 @@ class _DebiteurDetailScreenState extends State<DebiteurDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _future = _repo.debiteurs.isEmpty ? _repo.refreshAll() : Future.value();
+    _future = _load();
+  }
+
+  Future<void> _load() => _repo.refreshAll();
+
+  Future<void> _setAcces(bool actif) async {
+    try {
+      await _repo.setDebiteurAcces(widget.debiteurId, actif);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(actif ? 'Accès portail réactivé.' : 'Accès portail suspendu.')),
+      );
+      setState(() => _future = _load());
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    }
+  }
+
+  void _inviter() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Invitation gérée par l\'endpoint serveur.')),
+    );
   }
 
   @override
@@ -38,7 +60,22 @@ class _DebiteurDetailScreenState extends State<DebiteurDetailScreen> {
         }
         if (snapshot.hasError) {
           final msg = snapshot.error is ApiException ? (snapshot.error as ApiException).message : 'Erreur de chargement.';
-          return Scaffold(appBar: AppBar(title: const Text('Débiteur')), body: Center(child: Text(msg)));
+          return Scaffold(
+            appBar: AppBar(title: const Text('Débiteur')),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(msg, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    FilledButton(onPressed: () => setState(() => _future = _load()), child: const Text('Réessayer')),
+                  ],
+                ),
+              ),
+            ),
+          );
         }
         final debiteur = _repo.debiteurParId(widget.debiteurId);
         if (debiteur == null) {
@@ -66,7 +103,11 @@ class _DebiteurDetailScreenState extends State<DebiteurDetailScreen> {
                 const EmptyPlaceholder(message: 'Documents non chargés depuis l\'API pour ce débiteur.', icon: Icons.folder_open_outlined),
                 const EmptyPlaceholder(message: 'Aucune demande en cours (échéancier, attestation, contestation).'),
                 const EmptyPlaceholder(message: 'Aucun historique additionnel.', icon: Icons.history),
-                _AccesPortailTab(debiteur: debiteur),
+                _AccesPortailTab(
+                  debiteur: debiteur,
+                  onBasculer: () => _setAcces(!debiteur.accesPortailActif),
+                  onInviter: _inviter,
+                ),
               ],
             ),
           ),
@@ -107,8 +148,14 @@ class _CreancesTab extends StatelessWidget {
 
 class _AccesPortailTab extends StatelessWidget {
   final Debiteur debiteur;
+  final VoidCallback onBasculer;
+  final VoidCallback onInviter;
 
-  const _AccesPortailTab({required this.debiteur});
+  const _AccesPortailTab({
+    required this.debiteur,
+    required this.onBasculer,
+    required this.onInviter,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -140,7 +187,7 @@ class _AccesPortailTab extends StatelessWidget {
                   children: [
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () {},
+                        onPressed: onBasculer,
                         icon: Icon(debiteur.accesPortailActif ? Icons.pause_circle_outline : Icons.play_circle_outline),
                         label: Text(debiteur.accesPortailActif ? 'Suspendre' : 'Réactiver'),
                       ),
@@ -148,7 +195,7 @@ class _AccesPortailTab extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton.icon(
-                        onPressed: () {},
+                        onPressed: onInviter,
                         icon: const Icon(Icons.mail_outline),
                         label: const Text('Inviter'),
                       ),

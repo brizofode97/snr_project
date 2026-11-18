@@ -94,6 +94,9 @@ SituationCreance situationFromApi(String? value) {
       return SituationCreance.partielle;
     case 'soldée':
     case 'soldee':
+    case 'clos':
+    case 'clôturée':
+    case 'cloturee':
       return SituationCreance.soldee;
     default:
       return SituationCreance.aucunPaiement;
@@ -153,6 +156,7 @@ class Creance {
   final List<EvenementCreance> chronologie;
   final List<String> garanties;
   final List<String> documentIds;
+  final int? soldeConnu;
 
   const Creance({
     required this.id,
@@ -174,6 +178,7 @@ class Creance {
     this.chronologie = const [],
     this.garanties = const [],
     this.documentIds = const [],
+    this.soldeConnu,
   });
 
   factory Creance.fromApi(Map<String, dynamic> m) {
@@ -210,12 +215,45 @@ class Creance {
       chronologie: chrono,
       garanties: garanties,
       documentIds: (m['documentIds'] as List? ?? []).map((e) => e.toString()).toList(),
+      soldeConnu: m['solde'] is num
+          ? (m['solde'] as num).toInt()
+          : int.tryParse(m['solde']?.toString() ?? ''),
     );
   }
+
+  Creance copyWith({
+    List<EvenementCreance>? chronologie,
+    List<String>? documentIds,
+    int? soldeConnu,
+    SituationCreance? situation,
+  }) =>
+      Creance(
+        id: id,
+        reference: reference,
+        debiteurId: debiteurId,
+        mandant: mandant,
+        portefeuille: portefeuille,
+        nature: nature,
+        dateCreance: dateCreance,
+        dateEcheance: dateEcheance,
+        principal: principal,
+        interets: interets,
+        frais: frais,
+        phase: phase,
+        situation: situation ?? this.situation,
+        agentAffecte: agentAffecte,
+        contestee: contestee,
+        prochaineAction: prochaineAction,
+        chronologie: chronologie ?? this.chronologie,
+        garanties: garanties,
+        documentIds: documentIds ?? this.documentIds,
+        soldeConnu: soldeConnu ?? this.soldeConnu,
+      );
 
   int get montantTotal => principal + interets + frais;
 
   int get soldeRestant {
+    if (soldeConnu != null) return soldeConnu!;
     switch (situation) {
       case SituationCreance.aucunPaiement:
         return montantTotal;

@@ -44,12 +44,24 @@ class EcheanceLigne {
     this.payee = false,
   });
 
-  factory EcheanceLigne.fromApi(Map<String, dynamic> m, int idx) => EcheanceLigne(
-        numero: (m['n'] ?? m['numero'] ?? idx + 1) as int,
-        dateLimite: DateTime.tryParse((m['date'] ?? m['dateLimite'] ?? '').toString()) ?? DateTime.now(),
-        montant: (m['montant'] is num) ? (m['montant'] as num).toInt() : int.tryParse('${m['montant']}') ?? 0,
-        payee: (m['statut']?.toString() == 'Payée') || m['payee'] == true,
-      );
+  factory EcheanceLigne.fromApi(Map<String, dynamic> m, int idx) {
+    final statut = (m['statut'] ?? '').toString().toLowerCase();
+    final paye = m['paye'];
+    return EcheanceLigne(
+      numero: int.tryParse((m['n'] ?? m['numero'] ?? idx + 1).toString()) ?? idx + 1,
+      dateLimite: DateTime.tryParse((m['date'] ?? m['dateLimite'] ?? '').toString()) ?? DateTime.now(),
+      montant: (m['montant'] is num)
+          ? (m['montant'] as num).toInt()
+          : int.tryParse('${m['montant']}') ?? 0,
+      payee: m['payee'] == true ||
+          statut == 'réglée' ||
+          statut == 'reglee' ||
+          statut == 'payée' ||
+          statut == 'payee' ||
+          (paye is num && paye > 0) ||
+          paye == true,
+    );
+  }
 }
 
 class Echeancier {
@@ -91,7 +103,27 @@ class Echeancier {
       nombreEcheances: (m['nb'] is num) ? (m['nb'] as num).toInt() : int.tryParse('${m['nombreEcheances']}') ?? lignes.length,
       frequence: (m['frequence'] ?? '').toString(),
       statut: statutEcheancierFromApi(m['statut']?.toString()),
-      echeances: [for (int i = 0; i < lignes.length; i++) EcheanceLigne.fromApi(Map<String, dynamic>.from(lignes[i]), i)],
+      echeances: [
+        for (int i = 0; i < lignes.length; i++)
+          EcheanceLigne.fromApi(Map<String, dynamic>.from(lignes[i]), i),
+      ],
     );
   }
+
+  Echeancier copyWith({
+    String? debiteurNom,
+    List<EcheanceLigne>? echeances,
+  }) =>
+      Echeancier(
+        id: id,
+        creanceId: creanceId,
+        debiteurNom: debiteurNom ?? this.debiteurNom,
+        version: version,
+        montantTotal: montantTotal,
+        acompte: acompte,
+        nombreEcheances: nombreEcheances,
+        frequence: frequence,
+        statut: statut,
+        echeances: echeances ?? this.echeances,
+      );
 }

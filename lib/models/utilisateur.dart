@@ -39,4 +39,36 @@ class Utilisateur {
     required this.profil,
     this.actif = true,
   });
+
+  static ProfilUtilisateur profilFromApi(dynamic value) {
+    final raw = value is Map ? (value['code'] ?? value['role'] ?? '') : value;
+    switch (raw?.toString().toUpperCase()) {
+      case 'ADMIN':
+        return ProfilUtilisateur.admin;
+      case 'DG':
+        return ProfilUtilisateur.dg;
+      case 'RESP_REC':
+        return ProfilUtilisateur.respRec;
+      case 'AGENT':
+        return ProfilUtilisateur.agent;
+      case 'JURIDIQUE':
+      case 'JURISTE':
+        return ProfilUtilisateur.juridique;
+      case 'COMPTABLE':
+        return ProfilUtilisateur.comptable;
+      case 'MANDANT':
+        return ProfilUtilisateur.mandant;
+      default:
+        return ProfilUtilisateur.debiteur;
+    }
+  }
+
+  factory Utilisateur.fromApi(Map<String, dynamic> m) => Utilisateur(
+        id: (m['id'] ?? '').toString(),
+        nom: (m['nom'] ?? '').toString(),
+        prenom: (m['prenom'] ?? '').toString(),
+        email: (m['email'] ?? '').toString(),
+        profil: profilFromApi(m['profil'] ?? m['role']),
+        actif: m['status'] != false && m['actif'] != false,
+      );
 }
