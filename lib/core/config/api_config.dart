@@ -41,7 +41,7 @@ class ApiConfig {
 
   static const String postLogoutRedirectUri = String.fromEnvironment(
     'KEYCLOAK_POST_LOGOUT_REDIRECT_URI',
-    defaultValue: 'snr360://logout',
+    defaultValue: 'snr360://auth',
   );
 
   static const List<String> scopes = <String>[

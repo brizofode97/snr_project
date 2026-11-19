@@ -1,15 +1,17 @@
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../app/menu.dart';
 import '../../app/navigation_history.dart';
 import '../../app/theme.dart';
-import '../../widgets/app_drawer.dart';
+import '../../core/auth/auth_service.dart';
 
 class HomeHubScreen extends StatelessWidget {
   const HomeHubScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final user = AuthService.instance.currentUser;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -39,7 +41,7 @@ class HomeHubScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        for (final section in drawerSections) ...[
+        for (final section in sectionsVisibles(user)) ...[
           Text(section.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           GridView.count(
@@ -50,7 +52,8 @@ class HomeHubScreen extends StatelessWidget {
             crossAxisSpacing: 10,
             childAspectRatio: 1.5,
             children: [
-              for (final entry in section.entries) _ShortcutCard(entry: entry),
+              for (final entry in section.entries)
+                _ShortcutCard(entry: entry, label: libelleEntree(entry, user)),
             ],
           ),
           const SizedBox(height: 18),
@@ -62,8 +65,9 @@ class HomeHubScreen extends StatelessWidget {
 
 class _ShortcutCard extends StatelessWidget {
   final DrawerEntry entry;
+  final String label;
 
-  const _ShortcutCard({required this.entry});
+  const _ShortcutCard({required this.entry, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +87,7 @@ class _ShortcutCard extends StatelessWidget {
               Icon(entry.icon, color: snrPrimary),
               const SizedBox(height: 8),
               Text(
-                entry.label,
+                label,
                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                 maxLines: 2,
               ),

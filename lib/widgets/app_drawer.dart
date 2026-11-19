@@ -1,62 +1,16 @@
 import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../app/menu.dart';
 import '../app/navigation_history.dart';
 import '../app/theme.dart';
 import '../core/auth/auth_service.dart';
 
-class DrawerEntry {
-  final String path;
-  final String label;
-  final IconData icon;
-
-  const DrawerEntry(this.path, this.label, this.icon);
-}
-
-class DrawerSection {
-  final String title;
-  final List<DrawerEntry> entries;
-
-  const DrawerSection(this.title, this.entries);
-}
-
-const List<DrawerSection> drawerSections = [
-  DrawerSection('Pilotage', [
-    DrawerEntry('/dashboard', 'Tableau de bord', Icons.dashboard_outlined),
-    DrawerEntry('/rapports', 'Rapports', Icons.bar_chart_outlined),
-    DrawerEntry('/validations', 'Validations', Icons.fact_check_outlined),
-  ]),
-  DrawerSection('Gestion des créances', [
-    DrawerEntry('/creances', 'Créances', Icons.account_balance_wallet_outlined),
-    DrawerEntry('/debiteurs', 'Débiteurs', Icons.people_outline),
-    DrawerEntry('/echeanciers', 'Échéanciers', Icons.event_note_outlined),
-  ]),
-  DrawerSection('Finance', [
-    DrawerEntry('/encaissements', 'Encaissements', Icons.payments_outlined),
-    DrawerEntry('/reversements', 'Reversements', Icons.compare_arrows_outlined),
-  ]),
-  DrawerSection('Juridique & Patrimoine', [
-    DrawerEntry('/contentieux', 'Contentieux', Icons.gavel_outlined),
-    DrawerEntry('/patrimoine', 'Patrimoine', Icons.apartment_outlined),
-  ]),
-  DrawerSection('Documents', [
-    DrawerEntry('/documents', 'Documents & attestations', Icons.folder_open_outlined),
-  ]),
-  DrawerSection('Organisation', [
-    DrawerEntry('/agent', 'Espace agent', Icons.badge_outlined),
-    DrawerEntry('/utilisateurs', 'Utilisateurs', Icons.manage_accounts_outlined),
-    DrawerEntry('/administration', 'Administration', Icons.admin_panel_settings_outlined),
-  ]),
-  DrawerSection('Portails externes', [
-    DrawerEntry('/portail-debiteur', 'Portail Débiteur', Icons.person_pin_circle_outlined),
-    DrawerEntry('/portail-mandant', 'Portail Mandant', Icons.handshake_outlined),
-  ]),
-];
-
 class AppDrawer extends StatelessWidget {
   final String currentPath;
+  final VoidCallback? onFermer;
 
-  const AppDrawer({super.key, required this.currentPath});
+  const AppDrawer({super.key, required this.currentPath, this.onFermer});
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +91,7 @@ class AppDrawer extends StatelessWidget {
               selected: currentPath == '/home',
               onTap: () => _navigate(context, '/home'),
             ),
-            for (final section in drawerSections) ...[
+            for (final section in sectionsVisibles(AuthService.instance.currentUser)) ...[
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                 child: Text(
@@ -153,7 +107,8 @@ class AppDrawer extends StatelessWidget {
               for (final entry in section.entries)
                 ListTile(
                   leading: Icon(entry.icon),
-                  title: Text(entry.label),
+                  title: Text(libelleEntree(
+                      entry, AuthService.instance.currentUser)),
                   selected: currentPath == entry.path,
                   onTap: () => _navigate(context, entry.path),
                 ),
@@ -171,16 +126,25 @@ class AppDrawer extends StatelessWidget {
     );
   }
 
+  void _fermer(BuildContext context) {
+    final onFermer = this.onFermer;
+    if (onFermer != null) {
+      onFermer();
+    } else {
+      Navigator.of(context).pop();
+    }
+  }
+
   void _navigate(BuildContext context, String path) {
     final router = GoRouter.of(context);
-    Navigator.of(context).pop();
+    _fermer(context);
     navigationHistory.push(currentPath);
     router.go(path);
   }
 
   Future<void> _deconnecter(BuildContext context) async {
     final router = GoRouter.of(context);
-    Navigator.of(context).pop();
+    _fermer(context);
     await AuthService.instance.logout();
     navigationHistory.reset();
     router.go('/login');

@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../core/auth/auth_service.dart';
+import 'menu.dart';
 import '../screens/accueil/accueil_screen.dart';
 import '../screens/administration/administration_screen.dart';
 import '../screens/auth/login_screen.dart';
@@ -22,7 +23,9 @@ import '../screens/encaissements/transaction_detail_screen.dart';
 import '../screens/creances/creance_detail_screen.dart';
 import '../screens/creances/creances_list_screen.dart';
 import '../screens/home/home_hub_screen.dart';
+import '../screens/mandants/mandants_screen.dart';
 import '../screens/patrimoine/bien_detail_screen.dart';
+import '../screens/profils/profils_screen.dart';
 import '../screens/patrimoine/patrimoine_list_screen.dart';
 import '../screens/portail_debiteur/portail_debiteur_screen.dart';
 import '../screens/portail_mandant/portail_mandant_screen.dart';
@@ -42,6 +45,9 @@ final GoRouter appRouter = GoRouter(
     final estPublic = location == '/' || location == '/login';
     if (!connecte && !estPublic) return '/login';
     if (connecte && estPublic) return '/home';
+    if (connecte && !peutAccederChemin(AuthService.instance.currentUser, location)) {
+      return '/home';
+    }
     return null;
   },
   routes: [
@@ -71,6 +77,8 @@ final GoRouter appRouter = GoRouter(
         GoRoute(path: '/rapports', builder: (context, state) => const RapportsScreen()),
         GoRoute(path: '/administration', builder: (context, state) => const AdministrationScreen()),
         GoRoute(path: '/utilisateurs', builder: (context, state) => const UtilisateursListScreen()),
+        GoRoute(path: '/profils', builder: (context, state) => const ProfilsScreen()),
+        GoRoute(path: '/mandants', builder: (context, state) => const MandantsScreen()),
         GoRoute(path: '/portail-debiteur', builder: (context, state) => const PortailDebiteurScreen()),
         GoRoute(path: '/portail-mandant', builder: (context, state) => const PortailMandantScreen()),
       ],
