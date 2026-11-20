@@ -10,7 +10,9 @@ import '../../models/creance.dart';
 import '../../models/message_portail.dart';
 import '../../models/transaction.dart';
 import '../../widgets/empty_placeholder.dart';
+import '../../widgets/filter_widgets.dart';
 import '../../widgets/kpi_card.dart';
+import '../../widgets/paginated_list_view.dart';
 import '../../widgets/status_badge.dart';
 
 const List<RapportPredefini> _rapports = <RapportPredefini>[
@@ -71,7 +73,8 @@ class _PortailMandantScreenState extends State<PortailMandantScreen> {
     if (id == null || id.isEmpty) {
       for (final mandant in _repo.mandants) {
         if (mandant is Map) {
-          final candidat = (mandant['id'] ?? mandant['mandantId'] ?? '').toString();
+          final candidat = (mandant['id'] ?? mandant['mandantId'] ?? '')
+              .toString();
           if (candidat.isNotEmpty) {
             id = candidat;
             break;
@@ -85,7 +88,9 @@ class _PortailMandantScreenState extends State<PortailMandantScreen> {
       }
     }
     _mandantId = id ?? '';
-    await _repo.refreshMessages(mandantId: _mandantId.isEmpty ? null : _mandantId);
+    await _repo.refreshMessages(
+      mandantId: _mandantId.isEmpty ? null : _mandantId,
+    );
   }
 
   List<Creance> _dossiers() =>
@@ -124,7 +129,9 @@ class _PortailMandantScreenState extends State<PortailMandantScreen> {
           );
         }
         final dossiers = _dossiers();
-        final mandantNom = _mandantId.isEmpty ? 'Mandant' : _repo.mandantNom(_mandantId);
+        final mandantNom = _mandantId.isEmpty
+            ? 'Mandant'
+            : _repo.mandantNom(_mandantId);
         return DefaultTabController(
           length: 5,
           child: Column(
@@ -174,7 +181,10 @@ class _SyntheseTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Portefeuille $mandantNom', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        Text(
+          'Portefeuille $mandantNom',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
         const SizedBox(height: 12),
         GridView.count(
           crossAxisCount: 2,
@@ -184,10 +194,32 @@ class _SyntheseTab extends StatelessWidget {
           crossAxisSpacing: 10,
           childAspectRatio: 1.3,
           children: [
-            KpiCard(label: 'Montant confié', value: formatFcfa(confie), icon: Icons.account_balance_wallet_outlined, color: Colors.indigo),
-            KpiCard(label: 'Encours', value: formatFcfa(encours), icon: Icons.hourglass_bottom, color: Colors.orange),
-            KpiCard(label: 'Dossiers', value: '${dossiers.length}', icon: Icons.folder_outlined, color: Colors.blueGrey),
-            KpiCard(label: 'Taux de recouvrement', value: confie == 0 ? '0 %' : '${(((confie - encours) / confie) * 100).toStringAsFixed(0)} %', icon: Icons.trending_up, color: Colors.green),
+            KpiCard(
+              label: 'Montant confié',
+              value: formatFcfa(confie),
+              icon: Icons.account_balance_wallet_outlined,
+              color: Colors.indigo,
+            ),
+            KpiCard(
+              label: 'Encours',
+              value: formatFcfa(encours),
+              icon: Icons.hourglass_bottom,
+              color: Colors.orange,
+            ),
+            KpiCard(
+              label: 'Dossiers',
+              value: '${dossiers.length}',
+              icon: Icons.folder_outlined,
+              color: Colors.blueGrey,
+            ),
+            KpiCard(
+              label: 'Taux de recouvrement',
+              value: confie == 0
+                  ? '0 %'
+                  : '${(((confie - encours) / confie) * 100).toStringAsFixed(0)} %',
+              icon: Icons.trending_up,
+              color: Colors.green,
+            ),
           ],
         ),
         if (dossiers.isEmpty) const EmptyPlaceholder(message: 'Aucun dossier.'),
@@ -196,28 +228,124 @@ class _SyntheseTab extends StatelessWidget {
   }
 }
 
-class _DossiersTab extends StatelessWidget {
+class _DossiersTab extends StatefulWidget {
   final List<Creance> dossiers;
 
   const _DossiersTab({required this.dossiers});
 
   @override
+  State<_DossiersTab> createState() => _DossiersTabState();
+}
+
+class _DossiersTabState extends State<_DossiersTab> {
+  final _searchController = TextEditingController();
+  String _query = '';
+  PhaseCreance? _phase;
+  SituationCreance? _situation;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _reinitialiser() {
+    setState(() {
+      _searchController.clear();
+      _query = '';
+      _phase = null;
+      _situation = null;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (dossiers.isEmpty) {
+    if (widget.dossiers.isEmpty) {
       return const EmptyPlaceholder(message: 'Aucun dossier.');
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: dossiers.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final c = dossiers[index];
+    final filtered = widget.dossiers.where((c) {
+      final matchRecherche =
+          _query.isEmpty ||
+          normalizeText(c.reference).contains(_query) ||
+          normalizeText(c.nature).contains(_query);
+      final matchPhase = _phase == null || c.phase == _phase;
+      final matchSituation = _situation == null || c.situation == _situation;
+      return matchRecherche && matchPhase && matchSituation;
+    }).toList();
+
+    return PaginatedListView<Creance>(
+      items: filtered,
+      itemLabel: 'dossiers',
+      emptyMessage: 'Aucun dossier ne correspond aux filtres.',
+      separatorBuilder: (_) => const SizedBox(height: 8),
+      header: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FilterSearchField(
+            controller: _searchController,
+            hint: 'Rechercher une référence ou une nature',
+            onChanged: (value) => setState(() => _query = normalizeText(value)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FilterDropdown<PhaseCreance?>(
+                  label: 'Phase',
+                  value: _phase,
+                  items: [
+                    const DropdownMenuItem<PhaseCreance?>(
+                      value: null,
+                      child: Text('Toutes'),
+                    ),
+                    for (final phase in PhaseCreance.values)
+                      DropdownMenuItem<PhaseCreance?>(
+                        value: phase,
+                        child: Text(phase.libelle),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() => _phase = value),
+                ),
+                FilterDropdown<SituationCreance?>(
+                  label: 'Situation',
+                  value: _situation,
+                  items: [
+                    const DropdownMenuItem<SituationCreance?>(
+                      value: null,
+                      child: Text('Toutes'),
+                    ),
+                    for (final situation in SituationCreance.values)
+                      DropdownMenuItem<SituationCreance?>(
+                        value: situation,
+                        child: Text(situation.libelle),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() => _situation = value),
+                ),
+                TextButton(
+                  onPressed: _reinitialiser,
+                  child: const Text('Réinitialiser'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      itemBuilder: (context, c) {
         return Card(
           child: ListTile(
             onTap: () => context.push('/creances/${c.id}'),
             title: Text(c.reference),
-            subtitle: Text('${c.nature} · ${formatFcfa(c.soldeRestant)} restant'),
-            trailing: StatusBadge(label: c.phase.libelle, color: Colors.blueGrey),
+            subtitle: Text(
+              '${c.nature} · ${formatFcfa(c.soldeRestant)} restant',
+            ),
+            trailing: StatusBadge(
+              label: c.phase.libelle,
+              color: Colors.blueGrey,
+            ),
           ),
         );
       },
@@ -225,28 +353,128 @@ class _DossiersTab extends StatelessWidget {
   }
 }
 
-class _ReversementsTab extends StatelessWidget {
+class _ReversementsTab extends StatefulWidget {
   final List<Reversement> reversements;
 
   const _ReversementsTab({required this.reversements});
 
   @override
+  State<_ReversementsTab> createState() => _ReversementsTabState();
+}
+
+class _ReversementsTabState extends State<_ReversementsTab> {
+  final _searchController = TextEditingController();
+  String _query = '';
+  StatutReversement? _statut;
+  String? _mois;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _reinitialiser() {
+    setState(() {
+      _searchController.clear();
+      _query = '';
+      _statut = null;
+      _mois = null;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (reversements.isEmpty) {
+    if (widget.reversements.isEmpty) {
       return const EmptyPlaceholder(message: 'Aucun reversement.');
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: reversements.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final r = reversements[index];
+    final moisDisponibles =
+        widget.reversements
+            .map((r) => r.mois)
+            .where((m) => m.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final filtered = widget.reversements.where((r) {
+      final matchRecherche =
+          _query.isEmpty ||
+          normalizeText(r.mandant).contains(_query) ||
+          normalizeText(r.mois).contains(_query);
+      final matchStatut = _statut == null || r.statut == _statut;
+      final matchMois = _mois == null || r.mois == _mois;
+      return matchRecherche && matchStatut && matchMois;
+    }).toList();
+
+    return PaginatedListView<Reversement>(
+      items: filtered,
+      itemLabel: 'reversements',
+      emptyMessage: 'Aucun reversement ne correspond aux filtres.',
+      separatorBuilder: (_) => const SizedBox(height: 8),
+      header: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FilterSearchField(
+            controller: _searchController,
+            hint: 'Rechercher un mois',
+            onChanged: (value) => setState(() => _query = normalizeText(value)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FilterDropdown<StatutReversement?>(
+                  label: 'Statut',
+                  value: _statut,
+                  items: [
+                    const DropdownMenuItem<StatutReversement?>(
+                      value: null,
+                      child: Text('Tous'),
+                    ),
+                    for (final statut in StatutReversement.values)
+                      DropdownMenuItem<StatutReversement?>(
+                        value: statut,
+                        child: Text(statut.libelle),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() => _statut = value),
+                ),
+                FilterDropdown<String>(
+                  label: 'Mois',
+                  value: _mois ?? '',
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('Tous'),
+                    ),
+                    for (final mois in moisDisponibles)
+                      DropdownMenuItem<String>(value: mois, child: Text(mois)),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _mois = (value == null || value.isEmpty) ? null : value;
+                  }),
+                ),
+                TextButton(
+                  onPressed: _reinitialiser,
+                  child: const Text('Réinitialiser'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      itemBuilder: (context, r) {
         return Card(
           child: ListTile(
             leading: const Icon(Icons.compare_arrows_outlined),
             title: Text(r.mois),
             subtitle: Text(formatFcfa(r.montant)),
-            trailing: StatusBadge(label: r.statut.libelle, color: Colors.blueGrey),
+            trailing: StatusBadge(
+              label: r.statut.libelle,
+              color: Colors.blueGrey,
+            ),
           ),
         );
       },
@@ -268,7 +496,8 @@ class _RapportsTab extends StatelessWidget {
       message = 'Erreur lors de l\'export CSV.';
     }
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -307,11 +536,23 @@ class _MessagesTab extends StatefulWidget {
 
 class _MessagesTabState extends State<_MessagesTab> {
   final _controller = TextEditingController();
+  final _searchController = TextEditingController();
+  String _query = '';
+  String? _filtre;
 
   @override
   void dispose() {
     _controller.dispose();
+    _searchController.dispose();
     super.dispose();
+  }
+
+  void _reinitialiser() {
+    setState(() {
+      _searchController.clear();
+      _query = '';
+      _filtre = null;
+    });
   }
 
   Future<void> _envoyer() async {
@@ -328,7 +569,8 @@ class _MessagesTabState extends State<_MessagesTab> {
       setState(() {});
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -339,40 +581,90 @@ class _MessagesTabState extends State<_MessagesTab> {
 
   @override
   Widget build(BuildContext context) {
-    final messages = SnrRepository.instance.messages;
-    return Column(
-      children: [
-        Expanded(
-          child: messages.isEmpty
-              ? const EmptyPlaceholder(message: 'Aucun message.')
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final m = messages[index];
-                    return Align(
-                      alignment: m.deMoi ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(12),
-                        constraints: const BoxConstraints(maxWidth: 280),
-                        decoration: BoxDecoration(
-                          color: m.deMoi ? Colors.blue.shade50 : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(m.contenu),
-                            const SizedBox(height: 4),
-                            Text(formatDate(m.date), style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
-                          ],
+    final source = SnrRepository.instance.messages;
+    final filtered = source.where((m) {
+      final matchRecherche =
+          _query.isEmpty ||
+          normalizeText(m.contenu).contains(_query) ||
+          normalizeText(m.auteur).contains(_query);
+      final matchFiltre =
+          _filtre == null || (_filtre == 'Envoyés' ? m.deMoi : !m.deMoi);
+      return matchRecherche && matchFiltre;
+    }).toList();
+
+    final liste = source.isEmpty
+        ? const Expanded(child: EmptyPlaceholder(message: 'Aucun message.'))
+        : Expanded(
+            child: PaginatedListView<MessagePortail>(
+              items: filtered,
+              itemLabel: 'messages',
+              emptyMessage: 'Aucun message ne correspond aux filtres.',
+              separatorBuilder: (_) => const SizedBox.shrink(),
+              header: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FilterSearchField(
+                    controller: _searchController,
+                    hint: 'Rechercher un message',
+                    onChanged: (value) =>
+                        setState(() => _query = normalizeText(value)),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilterChips<String>(
+                          values: const <String>['Envoyés', 'Reçus'],
+                          selected: _filtre,
+                          label: (value) => value,
+                          onChanged: (value) => setState(() => _filtre = value),
                         ),
                       ),
-                    );
-                  },
-                ),
-        ),
+                      TextButton(
+                        onPressed: _reinitialiser,
+                        child: const Text('Réinitialiser'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              itemBuilder: (context, m) {
+                return Align(
+                  alignment: m.deMoi
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    constraints: const BoxConstraints(maxWidth: 280),
+                    decoration: BoxDecoration(
+                      color: m.deMoi
+                          ? Colors.blue.shade50
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(m.contenu),
+                        const SizedBox(height: 4),
+                        Text(
+                          formatDate(m.date),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          );
+
+    return Column(
+      children: [
+        liste,
         Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -380,12 +672,18 @@ class _MessagesTabState extends State<_MessagesTab> {
               Expanded(
                 child: TextField(
                   controller: _controller,
-                  decoration: const InputDecoration(hintText: 'Écrire un message...', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(
+                    hintText: 'Écrire un message...',
+                    border: OutlineInputBorder(),
+                  ),
                   onSubmitted: (_) => _envoyer(),
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton.filled(onPressed: _envoyer, icon: const Icon(Icons.send)),
+              IconButton.filled(
+                onPressed: _envoyer,
+                icon: const Icon(Icons.send),
+              ),
             ],
           ),
         ),

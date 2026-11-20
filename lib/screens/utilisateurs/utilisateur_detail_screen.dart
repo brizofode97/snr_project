@@ -21,6 +21,8 @@ class _UtilisateurDetailScreenState extends State<UtilisateurDetailScreen> {
   final _nomController = TextEditingController();
   final _emailController = TextEditingController();
   late Future<Utilisateur?> _future;
+  ProfilUtilisateur _profil = ProfilUtilisateur.agent;
+  bool _actif = true;
 
   @override
   void initState() {
@@ -43,6 +45,8 @@ class _UtilisateurDetailScreenState extends State<UtilisateurDetailScreen> {
         _prenomController.text = u.prenom;
         _nomController.text = u.nom;
         _emailController.text = u.email;
+        _profil = u.profil;
+        _actif = u.actif;
         return u;
       }
     }
@@ -71,7 +75,7 @@ class _UtilisateurDetailScreenState extends State<UtilisateurDetailScreen> {
   }
 
   Future<void> _enregistrer(Utilisateur u) async {
-    final code = _profilCode(u.profil);
+    final code = _profilCode(_profil);
     try {
       await _repo.saveUtilisateur(<String, dynamic>{
         'id': u.id,
@@ -79,7 +83,7 @@ class _UtilisateurDetailScreenState extends State<UtilisateurDetailScreen> {
         'prenom': _prenomController.text.trim(),
         'email': _emailController.text.trim(),
         'profil': <String, dynamic>{'code': code, 'proCode': code},
-        'status': u.actif,
+        'status': _actif,
       });
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -178,6 +182,24 @@ class _UtilisateurDetailScreenState extends State<UtilisateurDetailScreen> {
                     TextFormField(
                       controller: _emailController,
                       decoration: const InputDecoration(labelText: 'Email', border: OutlineInputBorder()),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<ProfilUtilisateur>(
+                      initialValue: _profil,
+                      decoration: const InputDecoration(labelText: 'Profil', border: OutlineInputBorder()),
+                      items: [
+                        for (final profil in ProfilUtilisateur.values)
+                          DropdownMenuItem<ProfilUtilisateur>(
+                            value: profil,
+                            child: Text(profil.libelle),
+                          ),
+                      ],
+                      onChanged: (value) => setState(() => _profil = value ?? _profil),
+                    ),
+                    SwitchListTile(
+                      title: const Text('Compte actif'),
+                      value: _actif,
+                      onChanged: (value) => setState(() => _actif = value),
                     ),
                     const SizedBox(height: 20),
                     ElevatedButton(onPressed: () => _enregistrer(u), child: const Text('Enregistrer')),

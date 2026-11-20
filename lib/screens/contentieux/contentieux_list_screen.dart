@@ -5,7 +5,8 @@ import '../../app/format.dart';
 import '../../core/network/api_client.dart';
 import '../../data/snr_repository.dart';
 import '../../models/acte_contentieux.dart';
-import '../../widgets/empty_placeholder.dart';
+import '../../widgets/filter_widgets.dart';
+import '../../widgets/paginated_list_view.dart';
 import '../../widgets/status_badge.dart';
 
 class ContentieuxListScreen extends StatefulWidget {
@@ -18,6 +19,10 @@ class ContentieuxListScreen extends StatefulWidget {
 class _ContentieuxListScreenState extends State<ContentieuxListScreen> {
   late Future<void> _future;
   final _repo = SnrRepository.instance;
+  final _recherche = TextEditingController();
+  StatutActe? _statut;
+  String? _type;
+  bool _filtresVisibles = false;
 
   @override
   void initState() {
@@ -25,6 +30,20 @@ class _ContentieuxListScreenState extends State<ContentieuxListScreen> {
     _future = _repo.actesContentieux.isEmpty
         ? _repo.refreshAll()
         : Future.value();
+  }
+
+  @override
+  void dispose() {
+    _recherche.dispose();
+    super.dispose();
+  }
+
+  void _reinitialiser() {
+    _recherche.clear();
+    setState(() {
+      _statut = null;
+      _type = null;
+    });
   }
 
   Color _couleur(StatutActe statut) {
@@ -73,16 +92,78 @@ class _ContentieuxListScreenState extends State<ContentieuxListScreen> {
           );
         }
 
-        final actes = _repo.actesContentieux;
-        if (actes.isEmpty) {
-          return const EmptyPlaceholder(message: 'Aucun acte contentieux.');
-        }
-        return ListView.separated(
+        final actesSource = _repo.actesContentieux;
+        final types =
+            actesSource
+                .map((acte) => acte.type.trim())
+                .where((type) => type.isNotEmpty)
+                .toSet()
+                .toList()
+              ..sort();
+        final type = _type != null && types.contains(_type) ? _type : null;
+        final query = normalizeText(_recherche.text);
+        final actes = actesSource.where((acte) {
+          if (_statut != null && acte.statut != _statut) return false;
+          if (type != null && acte.type != type) return false;
+          if (query.isEmpty) return true;
+          return normalizeText(
+            <String>[
+              acte.type,
+              acte.debiteurNom,
+              acte.statut.libelle,
+              acte.creanceId,
+            ].join(' '),
+          ).contains(query);
+        }).toList();
+
+        final header = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FilterSearchField(
+              controller: _recherche,
+              hint: 'Type, débiteur, créance…',
+              onChanged: (_) => setState(() {}),
+            ),
+            FilterChips<StatutActe>(
+              values: StatutActe.values,
+              selected: _statut,
+              label: (statut) => statut.libelle,
+              onChanged: (value) => setState(() => _statut = value),
+            ),
+            FilterPanel(
+              show: _filtresVisibles,
+              onToggle: () =>
+                  setState(() => _filtresVisibles = !_filtresVisibles),
+              onReset: _reinitialiser,
+              children: [
+                FilterDropdown<String?>(
+                  label: 'Type d’acte',
+                  value: type,
+                  width: 180,
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Tous'),
+                    ),
+                    for (final item in types)
+                      DropdownMenuItem<String?>(value: item, child: Text(item)),
+                  ],
+                  onChanged: (value) => setState(() => _type = value),
+                ),
+              ],
+            ),
+          ],
+        );
+
+        return PaginatedListView<ActeContentieux>(
+          items: actes,
+          itemLabel: 'acte(s)',
+          emptyMessage: actesSource.isEmpty
+              ? 'Aucun acte contentieux.'
+              : 'Aucun acte ne correspond aux filtres.',
+          header: header,
           padding: const EdgeInsets.all(16),
-          itemCount: actes.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 8),
-          itemBuilder: (context, index) {
-            final a = actes[index];
+          itemBuilder: (context, a) {
             return Card(
               child: ListTile(
                 onTap: () => context.push('/contentieux/${a.id}'),

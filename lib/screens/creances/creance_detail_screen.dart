@@ -1,3 +1,4 @@
+import 'package:go_router/go_router.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../app/format.dart';
@@ -7,6 +8,7 @@ import '../../models/creance.dart';
 import '../../models/echeancier.dart';
 import '../../widgets/empty_placeholder.dart';
 import '../../widgets/status_badge.dart';
+import 'creance_traitement.dart';
 
 class CreanceDetailScreen extends StatefulWidget {
   final String creanceId;
@@ -71,7 +73,12 @@ class _CreanceDetailScreenState extends State<CreanceDetailScreen> {
                 _ChronologieTab(creance: creance),
                 _DocumentsTab(creance: creance),
                 _GarantiesTab(creance: creance),
-                const _ActionsTab(),
+                _ActionsTab(
+                  creance: creance,
+                  onUpdated: () => setState(
+                    () => _future = _repo.fetchCreance(widget.creanceId),
+                  ),
+                ),
               ],
             ),
           ),
@@ -356,40 +363,77 @@ class _GarantiesTab extends StatelessWidget {
 }
 
 class _ActionsTab extends StatelessWidget {
-  const _ActionsTab();
+  final Creance creance;
+  final VoidCallback onUpdated;
+
+  const _ActionsTab({required this.creance, required this.onUpdated});
+
+  Future<void> _executer(
+    BuildContext context,
+    Future<bool?> Function(BuildContext, String) action,
+  ) async {
+    final result = await action(context, creance.id);
+    if (result == true) onUpdated();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final actions = [
-      ('Enregistrer une action', Icons.edit_note_outlined),
-      ('Enregistrer une promesse', Icons.handshake_outlined),
-      ('Enregistrer un paiement', Icons.payments_outlined),
-      ('Proposer un échéancier', Icons.event_note_outlined),
-      ('Proposer un ajustement', Icons.tune_outlined),
-      ('Contester la créance', Icons.report_gmailerrorred_outlined),
-      ('Ouvrir un acte contentieux', Icons.gavel_outlined),
-      ('Demander la clôture', Icons.task_alt_outlined),
+    final actions = <(String, IconData, Future<bool?> Function(BuildContext, String))>[
+      ('Soumettre à validation', Icons.send_outlined, soumettreCreanceDialog),
+      ('Valider la créance', Icons.verified_outlined, validerCreanceDialog),
+      ('Renvoyer au contrôle', Icons.undo_outlined, rejeterCreanceDialog),
+      ('Affecter à un agent', Icons.person_add_outlined, affecterCreanceDialog),
+      ('Corriger la saisie', Icons.edit_outlined, corrigerCreanceDialog),
+      ('Enregistrer une action', Icons.edit_note_outlined, enregistrerActionCreance),
+      ('Planifier une action', Icons.schedule_outlined, planifierActionDialog),
+      ('Joindre une pièce', Icons.attach_file_outlined, joindrePieceCreance),
+      ('Enregistrer une promesse', Icons.handshake_outlined, enregistrerPromesseDialog),
+      ('Saisir un paiement', Icons.payments_outlined, enregistrerPaiementDialog),
+      ('Générer un courrier', Icons.description_outlined, enregistrerCourrierDialog),
+      ('Proposer un échéancier', Icons.event_note_outlined, creerEcheancierDialog),
+      ('Proposer un ajustement', Icons.tune_outlined, enregistrerAjustementDialog),
+      ('Demander une attestation', Icons.badge_outlined, demanderAttestationDialog),
+      ('Contester la créance', Icons.report_gmailerrorred_outlined, contesterCreanceDialog),
+      ('Ouvrir un acte contentieux', Icons.gavel_outlined, ouvrirActeContentieuxDialog),
+      ('Demander la clôture', Icons.task_alt_outlined, demanderClotureDialog),
+      ('Réouvrir le dossier', Icons.restore_outlined, reouvrirCreanceDialog),
     ];
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: actions.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final (label, icon) = actions[index];
-        return OutlinedButton.icon(
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Action "$label" — maquette visuelle uniquement')),
-            );
-          },
-          icon: Icon(icon),
-          label: Align(alignment: Alignment.centerLeft, child: Text(label)),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-            alignment: Alignment.centerLeft,
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => context.push('/creances/${creance.id}/edit'),
+                  icon: const Icon(Icons.edit_document),
+                  label: const Text('Modifier la fiche'),
+                ),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: actions.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final (label, icon, action) = actions[index];
+              return OutlinedButton.icon(
+                onPressed: () => _executer(context, action),
+                icon: Icon(icon),
+                label: Align(alignment: Alignment.centerLeft, child: Text(label)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                  alignment: Alignment.centerLeft,
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

@@ -4,8 +4,8 @@ import '../../app/format.dart';
 import '../../app/theme.dart';
 import '../../core/network/api_client.dart';
 import '../../data/api/creances_api_service.dart';
-import '../../widgets/empty_placeholder.dart';
-import '../../widgets/pagination_bar.dart';
+import '../../widgets/filter_widgets.dart';
+import '../../widgets/paginated_list_view.dart';
 import '../../widgets/status_badge.dart';
 
 class MandantsScreen extends StatefulWidget {
@@ -18,8 +18,10 @@ class MandantsScreen extends StatefulWidget {
 class _MandantsScreenState extends State<MandantsScreen> {
   late Future<List<dynamic>> _future;
   final TextEditingController _recherche = TextEditingController();
-  int _page = 0;
-  int _pageSize = 10;
+  String? _statut;
+  String? _perimetre;
+  bool _filtresVisibles = false;
+  int _generation = 0;
 
   @override
   void initState() {
@@ -34,42 +36,16 @@ class _MandantsScreenState extends State<MandantsScreen> {
   }
 
   void _recharger() => setState(() {
-    _page = 0;
+    _generation++;
     _future = CreancesApiService.instance.getMandants();
   });
 
-  String _normaliser(String value) {
-    var texte = value.toLowerCase();
-    const remplacements = <String, String>{
-      'à': 'a',
-      'â': 'a',
-      'ä': 'a',
-      'á': 'a',
-      'é': 'e',
-      'è': 'e',
-      'ê': 'e',
-      'ë': 'e',
-      'î': 'i',
-      'ï': 'i',
-      'í': 'i',
-      'ô': 'o',
-      'ö': 'o',
-      'ó': 'o',
-      'ù': 'u',
-      'û': 'u',
-      'ü': 'u',
-      'ú': 'u',
-      'ç': 'c',
-      'œ': 'oe',
-      'æ': 'ae',
-    };
-    remplacements.forEach((cle, valeur) {
-      texte = texte.replaceAll(cle, valeur);
+  void _reinitialiser() {
+    _recherche.clear();
+    setState(() {
+      _statut = null;
+      _perimetre = null;
     });
-    return texte
-        .replaceAll(RegExp(r'[^a-z0-9 ]'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
   }
 
   @override
@@ -102,153 +78,163 @@ class _MandantsScreenState extends State<MandantsScreen> {
           );
         }
 
-        final recherche = _normaliser(_recherche.text);
-        final mandants =
-            (snapshot.data ?? const <dynamic>[])
-                .whereType<Map>()
-                .map((e) => Map<String, dynamic>.from(e))
-                .where((mandant) {
-                  if (recherche.isEmpty) return true;
-                  final mandat = mandant['mandat'] is Map
-                      ? Map<String, dynamic>.from(mandant['mandat'] as Map)
-                      : <String, dynamic>{};
-                  return _normaliser(
-                    <String>[
-                      (mandant['sigle'] ?? '').toString(),
-                      (mandant['nom'] ?? '').toString(),
-                      (mandat['ref'] ?? '').toString(),
-                      (mandant['contact'] ?? '').toString(),
-                    ].join(' '),
-                  ).contains(recherche);
-                })
+        final sources = (snapshot.data ?? const <dynamic>[])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        final perimetres =
+            sources
+                .map(
+                  (mandant) => mandant['mandat'] is Map
+                      ? (Map<String, dynamic>.from(
+                                  mandant['mandat'] as Map,
+                                )['perimetre'] ??
+                                '')
+                            .toString()
+                      : '',
+                )
+                .where((perimetre) => perimetre.isNotEmpty)
+                .toSet()
                 .toList()
-              ..sort((a, b) {
-                final actifA = a['actif'] != false ? 1 : 0;
-                final actifB = b['actif'] != false ? 1 : 0;
-                if (actifA != actifB) return actifB - actifA;
-                return (a['sigle'] ?? '').toString().compareTo(
-                  (b['sigle'] ?? '').toString(),
-                );
-              });
+              ..sort();
+        final perimetre = _perimetre != null && perimetres.contains(_perimetre)
+            ? _perimetre
+            : null;
+        final recherche = normalizeText(_recherche.text);
+        final mandants =
+            sources.where((mandant) {
+              final mandat = mandant['mandat'] is Map
+                  ? Map<String, dynamic>.from(mandant['mandat'] as Map)
+                  : <String, dynamic>{};
+              final actif = mandant['actif'] != false;
+              if (_statut == 'Actif' && !actif) return false;
+              if (_statut == 'Désactivé' && actif) return false;
+              if (perimetre != null &&
+                  (mandat['perimetre'] ?? '').toString() != perimetre) {
+                return false;
+              }
+              if (recherche.isEmpty) return true;
+              return normalizeText(
+                <String>[
+                  (mandant['sigle'] ?? '').toString(),
+                  (mandant['nom'] ?? '').toString(),
+                  (mandat['ref'] ?? '').toString(),
+                  (mandant['contact'] ?? '').toString(),
+                ].join(' '),
+              ).contains(recherche);
+            }).toList()..sort((a, b) {
+              final actifA = a['actif'] != false ? 1 : 0;
+              final actifB = b['actif'] != false ? 1 : 0;
+              if (actifA != actifB) return actifB - actifA;
+              return (a['sigle'] ?? '').toString().compareTo(
+                (b['sigle'] ?? '').toString(),
+              );
+            });
 
-        final pages = mandants.isEmpty
-            ? 1
-            : (mandants.length / _pageSize).ceil();
-        final page = _page.clamp(0, pages - 1);
-        final visibles = pageItems(mandants, page, _pageSize);
-
-        return Column(
+        final header = Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: TextField(
-                controller: _recherche,
-                decoration: const InputDecoration(
-                  hintText: 'Sigle, nom, référence du mandat, contact…',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onChanged: (_) => setState(() => _page = 0),
-              ),
+            FilterSearchField(
+              controller: _recherche,
+              hint: 'Sigle, nom, référence du mandat, contact…',
+              onChanged: (_) => setState(() {}),
             ),
-            Expanded(
-              child: visibles.isEmpty
-                  ? const EmptyPlaceholder(
-                      message: 'Aucun mandant ne correspond à la recherche.',
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      itemCount: visibles.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final mandant = visibles[index];
-                        final mandat = mandant['mandat'] is Map
-                            ? Map<String, dynamic>.from(
-                                mandant['mandat'] as Map,
-                              )
-                            : <String, dynamic>{};
-                        final actif = mandant['actif'] != false;
-                        return Card(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor: snrPrimary.withValues(
-                                    alpha: 0.12,
-                                  ),
-                                  child: Icon(
-                                    Icons.apartment_outlined,
-                                    color: snrPrimary,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '${mandant['sigle'] ?? '—'} — ${mandant['nom'] ?? '—'}',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        <String>[
-                                          if ((mandat['ref'] ?? '')
-                                              .toString()
-                                              .isNotEmpty)
-                                            'Mandat ${mandat['ref']}',
-                                          if ((mandant['contact'] ?? '')
-                                              .toString()
-                                              .isNotEmpty)
-                                            mandant['contact'].toString(),
-                                          '${mandant['creances'] ?? 0} créance(s)',
-                                        ].join(' · '),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      StatusBadge(
-                                        label: actif ? 'Actif' : 'Désactivé',
-                                        color: actif
-                                            ? Colors.green
-                                            : Colors.red,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton(
-                                  tooltip: 'Voir les détails',
-                                  icon: const Icon(Icons.visibility_outlined),
-                                  onPressed: () =>
-                                      _ouvrirDetails(context, mandant),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
+            FilterChips<String>(
+              values: const <String>['Actif', 'Désactivé'],
+              selected: _statut,
+              label: (value) => value,
+              onChanged: (value) => setState(() => _statut = value),
+            ),
+            FilterPanel(
+              show: _filtresVisibles,
+              onToggle: () =>
+                  setState(() => _filtresVisibles = !_filtresVisibles),
+              onReset: _reinitialiser,
+              children: [
+                FilterDropdown<String?>(
+                  label: 'Périmètre',
+                  value: perimetre,
+                  width: 180,
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Tous'),
                     ),
-            ),
-            PaginationBar(
-              page: page,
-              pageSize: _pageSize,
-              total: mandants.length,
-              itemLabel: 'mandant(s)',
-              onPageChanged: (value) => setState(() => _page = value),
-              onPageSizeChanged: (value) => setState(() {
-                _pageSize = value;
-                _page = 0;
-              }),
+                    for (final item in perimetres)
+                      DropdownMenuItem<String?>(value: item, child: Text(item)),
+                  ],
+                  onChanged: (value) => setState(() => _perimetre = value),
+                ),
+              ],
             ),
           ],
+        );
+
+        return PaginatedListView<Map<String, dynamic>>(
+          key: ValueKey(_generation),
+          items: mandants,
+          itemLabel: 'mandant(s)',
+          emptyMessage: 'Aucun mandant ne correspond à la recherche.',
+          header: header,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          itemBuilder: (context, mandant) {
+            final mandat = mandant['mandat'] is Map
+                ? Map<String, dynamic>.from(mandant['mandat'] as Map)
+                : <String, dynamic>{};
+            final actif = mandant['actif'] != false;
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: snrPrimary.withValues(alpha: 0.12),
+                      child: Icon(Icons.apartment_outlined, color: snrPrimary),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${mandant['sigle'] ?? '—'} — ${mandant['nom'] ?? '—'}',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            <String>[
+                              if ((mandat['ref'] ?? '').toString().isNotEmpty)
+                                'Mandat ${mandat['ref']}',
+                              if ((mandant['contact'] ?? '')
+                                  .toString()
+                                  .isNotEmpty)
+                                mandant['contact'].toString(),
+                              '${mandant['creances'] ?? 0} créance(s)',
+                            ].join(' · '),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          StatusBadge(
+                            label: actif ? 'Actif' : 'Désactivé',
+                            color: actif ? Colors.green : Colors.red,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Voir les détails',
+                      icon: const Icon(Icons.visibility_outlined),
+                      onPressed: () => _ouvrirDetails(context, mandant),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );

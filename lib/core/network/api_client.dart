@@ -122,8 +122,12 @@ class ApiClient {
   Future<dynamic> delete(String path) async =>
       _handleResponse(await _send('DELETE', uri(path)));
 
-  Future<String> getText(String path, {String accept = 'text/csv'}) async {
-    final response = await _send('GET', uri(path), accept: accept);
+  Future<String> getText(
+    String path, {
+    String accept = 'text/csv',
+    Map<String, String>? query,
+  }) async {
+    final response = await _send('GET', uri(path, query), accept: accept);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw _exceptionOf(
         utf8.decode(response.bodyBytes, allowMalformed: true),

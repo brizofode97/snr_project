@@ -308,4 +308,286 @@ class SnrRepository {
     required String debiteurId,
   }) =>
       _api.markMessagesRead(mandantId: mandantId, debiteurId: debiteurId);
+
+  /* ------------------------------------------------------------------ *
+   * Écritures métier : chaque opération resynchronise le dépôt local
+   * ------------------------------------------------------------------ */
+
+  Future<Map<String, dynamic>> _write(
+    Future<Map<String, dynamic>> Function() operation,
+  ) async {
+    final result = await operation();
+    await refreshAll();
+    return result;
+  }
+
+  Future<Map<String, dynamic>> creerCreance(Map<String, dynamic> body) =>
+      _write(() => _api.createCreance(body));
+
+  Future<Map<String, dynamic>> corrigerCreance(String id, Map<String, dynamic> body) =>
+      _write(() => _api.updateCreance(id, body));
+
+  Future<Map<String, dynamic>> soumettreCreance(String id) =>
+      _write(() => _api.submitCreance(id));
+
+  Future<Map<String, dynamic>> joindrePiece(
+    String id, {
+    required String type,
+    required String titre,
+  }) =>
+      _write(() => _api.addCreancePiece(id, type: type, titre: titre));
+
+  Future<Map<String, dynamic>> validerCreance(String id) =>
+      _write(() => _api.validateCreance(id));
+
+  Future<Map<String, dynamic>> rejeterCreance(String id, String motif) =>
+      _write(() => _api.rejectCreance(id, motif));
+
+  Future<Map<String, dynamic>> affecterCreance(
+    String id, {
+    required String agentId,
+    required String motif,
+  }) =>
+      _write(() => _api.assignCreance(id, agentId: agentId, motif: motif));
+
+  Future<Map<String, dynamic>> enregistrerAction(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.recordCreanceAction(id, body));
+
+  Future<Map<String, dynamic>> planifierAction(
+    String id, {
+    required String type,
+    String? date,
+    required String label,
+  }) =>
+      _write(
+        () => _api.planifierAction(id, type: type, date: date, label: label),
+      );
+
+  Future<Map<String, dynamic>> realiserTache(String id) =>
+      _write(() => _api.realiserTache(id));
+
+  Future<Map<String, dynamic>> enregistrerPromesse(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.addPromesse(id, body));
+
+  Future<Map<String, dynamic>> enregistrerCourrier(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.addCourrier(id, body));
+
+  Future<Map<String, dynamic>> modifierCourrier(
+    String id,
+    String pieceId,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.updateCourrier(id, pieceId, body));
+
+  Future<Map<String, dynamic>> demanderCloture(String id, String motif) =>
+      _write(() => _api.demanderCloture(id, motif));
+
+  Future<Map<String, dynamic>> deciderCloture(
+    String id, {
+    required bool ok,
+    required String motif,
+  }) =>
+      _write(() => _api.decideCloture(id, ok: ok, motif: motif));
+
+  Future<Map<String, dynamic>> reouvrirCreance(String id, String motif) =>
+      _write(() => _api.reopenCreance(id, motif));
+
+  Future<Map<String, dynamic>> demanderAttestation(
+    String creanceId,
+    String type,
+  ) =>
+      _write(() => _api.demanderAttestation(creanceId, type));
+
+  Future<Map<String, dynamic>> preparerAttestation(String id) =>
+      _write(() => _api.prepareAttestation(id));
+
+  Future<Map<String, dynamic>> creerEcheancier(Map<String, dynamic> body) =>
+      _write(() => _api.createEcheancier(body));
+
+  Future<Map<String, dynamic>> joindrePreuveEcheancier(
+    String id,
+    String description,
+  ) =>
+      _write(() => _api.addEcheancierPreuve(id, description));
+
+  Future<Map<String, dynamic>> repondreEcheancier(String id, bool accepte) =>
+      _write(() => _api.reponseDebiteurEcheancier(id, accepte));
+
+  Future<Map<String, dynamic>> importerPortefeuille(Map<String, dynamic> body) =>
+      _write(() => _api.importerPortefeuille(body));
+
+  Future<Map<String, dynamic>> contesterCreance(String id, String motif) =>
+      _write(() => _api.contesterCreance(id, motif));
+
+  Future<Map<String, dynamic>> deciderContestation(
+    String id,
+    String issue,
+    String motif,
+  ) =>
+      _write(() => _api.decideContestation(id, issue, motif));
+
+  Future<Map<String, dynamic>> ajouterAjustement(
+    String creanceId,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.addAjustement(creanceId, body));
+
+  Future<Map<String, dynamic>> deciderAjustement(
+    String id, {
+    required bool ok,
+    required String motif,
+  }) =>
+      _write(() => _api.decideAjustement(id, ok: ok, motif: motif));
+
+  Future<Map<String, dynamic>> enregistrerTransaction(Map<String, dynamic> body) =>
+      _write(() => _api.createTransaction(body));
+
+  Future<Map<String, dynamic>> rejeterTransaction(String id, String motif) =>
+      _write(() => _api.rejectTransaction(id, motif));
+
+  Future<Map<String, dynamic>> identifierTransaction(String id, String debiteurId) =>
+      _write(() => _api.identifyTransaction(id, debiteurId));
+
+  Future<Map<String, dynamic>> ventilerTransaction(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.allocateTransaction(id, body));
+
+  Future<dynamic> rapprochementAuto() async {
+    final result = await _api.autoRapprochement();
+    await refreshAll();
+    return result;
+  }
+
+  Future<Map<String, dynamic>> creerActe(String creanceId, String type) =>
+      _write(() => _api.createActe(creanceId, type));
+
+  Future<Map<String, dynamic>> creerFichePoursuites(String acteId) =>
+      _write(() => _api.createFichePoursuites(acteId));
+
+  Future<Map<String, dynamic>> viserFichePoursuites(
+    String acteId, {
+    required String decision,
+    String? motif,
+  }) =>
+      _write(
+        () => _api.visaFichePoursuites(acteId, decision: decision, motif: motif),
+      );
+
+  Future<Map<String, dynamic>> enregistrerAccuseReception(String acteId) =>
+      _write(() => _api.enregistrerAccuseReception(acteId));
+
+  Future<Map<String, dynamic>> enregistrerSuite(
+    String acteId,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.enregistrerSuite(acteId, body));
+
+  Future<Map<String, dynamic>> viserSuite(
+    String acteId, {
+    required String decision,
+    String? motif,
+  }) =>
+      _write(() => _api.visaSuite(acteId, decision: decision, motif: motif));
+
+  Future<Map<String, dynamic>> deposerDocument(Map<String, dynamic> body) =>
+      _write(() => _api.createDocument(body));
+
+  Future<Map<String, dynamic>> ajouterVersionDocument(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.addDocumentVersion(id, body));
+
+  Future<Map<String, dynamic>> enregistrerParametres(Map<String, dynamic> body) =>
+      _write(() => _api.saveParametresMetier(body));
+
+  Future<Map<String, dynamic>> creerMandant(Map<String, dynamic> body) =>
+      _write(() => _api.createMandant(body));
+
+  Future<Map<String, dynamic>> modifierMandant(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.updateMandant(id, body));
+
+  Future<dynamic> supprimerMandant(String id) async {
+    final result = await _api.deleteMandant(id);
+    await refreshAll();
+    return result;
+  }
+
+  Future<Map<String, dynamic>> enregistrerProfil(Map<String, dynamic> body) async {
+    final result = await _api.saveProfil(body);
+    return result;
+  }
+
+  Future<Map<String, dynamic>> payerSurPortail(
+    String creanceId,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.portalPayment(creanceId, body));
+
+  Future<Map<String, dynamic>> envoyerJustificatifPortail(
+    String creanceId,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.portalProof(creanceId, body));
+
+  Future<Map<String, dynamic>> demanderEchelonnementPortail(
+    String creanceId,
+    int? nb,
+    String commentaire,
+  ) =>
+      _write(
+        () => _api.demanderEchelonnementPortail(creanceId, nb, commentaire),
+      );
+
+  Future<Map<String, dynamic>> exporterComptable() =>
+      _write(() => _api.exportComptable());
+
+  Future<Map<String, dynamic>> enregistrerReversement(
+    String mandantId,
+    String mois,
+    String statut,
+  ) =>
+      _write(() => _api.saveReversement(mandantId, mois, statut));
+
+  Future<Map<String, dynamic>> envoyerMessage(Map<String, dynamic> body) =>
+      _write(() => _api.sendMessage(body));
+
+  Future<Map<String, dynamic>> creerDebiteur(Map<String, dynamic> body) =>
+      _write(() => _api.createDebiteur(body));
+
+  Future<Map<String, dynamic>> modifierDebiteur(
+    String id,
+    Map<String, dynamic> body,
+  ) =>
+      _write(() => _api.updateDebiteur(id, body));
+
+  Future<Map<String, dynamic>> inviterDebiteur(String id) =>
+      _write(() => _api.inviterDebiteur(id));
+
+  Future<String> demanderReinitialisationMotDePasse(String login) =>
+      _api.forgotPassword(login);
+
+  Future<Map<String, dynamic>> reinitialiserMotDePasse(
+    Map<String, dynamic> body,
+  ) =>
+      _api.resetPassword(body);
+
+  Future<Map<String, dynamic>> initialiserMotDePasse(
+    Map<String, dynamic> body,
+  ) =>
+      _api.resetPasswordInit(body);
 }

@@ -35,6 +35,7 @@ const List<DrawerSection> drawerSections = [
         rule: 'validations'),
     DrawerEntry('/rapports', 'Rapports', Icons.bar_chart_outlined,
         permissions: ['report.view']),
+    DrawerEntry('/conception', 'Dossier de conception', Icons.book_outlined),
   ]),
   DrawerSection('Recouvrement', [
     DrawerEntry('/agent', 'Espace agents', Icons.badge_outlined,
@@ -44,6 +45,8 @@ const List<DrawerSection> drawerSections = [
     DrawerEntry('/debiteurs', 'Débiteurs', Icons.people_outline,
         permissions: ['creance.view']),
     DrawerEntry('/echeanciers', 'Échéanciers et accords', Icons.event_note_outlined,
+        permissions: ['creance.view']),
+    DrawerEntry('/echanges', 'Échanges', Icons.forum_outlined,
         permissions: ['creance.view']),
   ]),
   DrawerSection('Finance', [

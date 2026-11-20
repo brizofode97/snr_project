@@ -7,6 +7,8 @@ import '../../data/api/creances_api_service.dart';
 import '../../data/snr_repository.dart';
 import '../../models/transaction.dart';
 import '../../widgets/empty_placeholder.dart';
+import '../../widgets/filter_widgets.dart';
+import '../../widgets/paginated_list_view.dart';
 import '../../widgets/status_badge.dart';
 
 class EncaissementsScreen extends StatefulWidget {
@@ -108,27 +110,159 @@ Color _couleurStatut(StatutTransaction statut) {
   }
 }
 
-class _TransactionsListe extends StatelessWidget {
+class _TransactionsListe extends StatefulWidget {
   final List<StatutTransaction>? statuts;
 
   const _TransactionsListe({required this.statuts});
 
   @override
+  State<_TransactionsListe> createState() => _TransactionsListeState();
+}
+
+class _TransactionsListeState extends State<_TransactionsListe> {
+  final _searchController = TextEditingController();
+  String _query = '';
+  StatutTransaction? _statut;
+  String? _canal;
+  String? _mois;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _reinitialiser() {
+    setState(() {
+      _searchController.clear();
+      _query = '';
+      _statut = null;
+      _canal = null;
+      _mois = null;
+    });
+  }
+
+  String _cleMois(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}';
+
+  String _libelleMois(String cle) {
+    final parties = cle.split('-');
+    return parties.length == 2 ? '${parties[1]}/${parties[0]}' : cle;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final liste = SnrRepository.instance.transactions
-        .where((t) => statuts == null || statuts!.contains(t.statut))
+    final source = SnrRepository.instance.transactions
+        .where(
+          (t) => widget.statuts == null || widget.statuts!.contains(t.statut),
+        )
         .toList();
-    if (liste.isEmpty) {
+    if (source.isEmpty) {
       return const EmptyPlaceholder(
         message: 'Aucune transaction dans cette catégorie.',
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: liste.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final t = liste[index];
+    final statuts = StatutTransaction.values
+        .where((s) => source.any((t) => t.statut == s))
+        .toList();
+    final canaux =
+        source.map((t) => t.canal).where((c) => c.isNotEmpty).toSet().toList()
+          ..sort();
+    final mois = source.map((t) => _cleMois(t.date)).toSet().toList()..sort();
+    final filtered = source.where((t) {
+      final matchRecherche =
+          _query.isEmpty ||
+          normalizeText(t.reference).contains(_query) ||
+          normalizeText(t.payeur).contains(_query) ||
+          normalizeText(t.canal).contains(_query);
+      final matchStatut = _statut == null || t.statut == _statut;
+      final matchCanal = _canal == null || t.canal == _canal;
+      final matchMois = _mois == null || _cleMois(t.date) == _mois;
+      return matchRecherche && matchStatut && matchCanal && matchMois;
+    }).toList();
+
+    return PaginatedListView<Transaction>(
+      items: filtered,
+      itemLabel: 'transactions',
+      emptyMessage: 'Aucune transaction ne correspond aux filtres.',
+      separatorBuilder: (_) => const SizedBox(height: 8),
+      header: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FilterSearchField(
+            controller: _searchController,
+            hint: 'Rechercher une référence, un payeur ou un canal',
+            onChanged: (value) => setState(() => _query = normalizeText(value)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FilterDropdown<StatutTransaction?>(
+                  label: 'Statut',
+                  value: _statut,
+                  items: [
+                    const DropdownMenuItem<StatutTransaction?>(
+                      value: null,
+                      child: Text('Tous'),
+                    ),
+                    for (final statut in statuts)
+                      DropdownMenuItem<StatutTransaction?>(
+                        value: statut,
+                        child: Text(statut.libelle),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() => _statut = value),
+                ),
+                FilterDropdown<String>(
+                  label: 'Canal',
+                  value: _canal ?? '',
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('Tous'),
+                    ),
+                    for (final canal in canaux)
+                      DropdownMenuItem<String>(
+                        value: canal,
+                        child: Text(canal),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _canal = (value == null || value.isEmpty) ? null : value;
+                  }),
+                ),
+                FilterDropdown<String>(
+                  label: 'Mois',
+                  value: _mois ?? '',
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('Tous'),
+                    ),
+                    for (final cle in mois)
+                      DropdownMenuItem<String>(
+                        value: cle,
+                        child: Text(_libelleMois(cle)),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _mois = (value == null || value.isEmpty) ? null : value;
+                  }),
+                ),
+                TextButton(
+                  onPressed: _reinitialiser,
+                  child: const Text('Réinitialiser'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      itemBuilder: (context, t) {
         return Card(
           child: ListTile(
             onTap: () => context.push('/encaissements/${t.id}'),

@@ -6,6 +6,8 @@ import '../../core/network/api_client.dart';
 import '../../data/snr_repository.dart';
 import '../../models/echeancier.dart';
 import '../../widgets/empty_placeholder.dart';
+import '../../widgets/filter_widgets.dart';
+import '../../widgets/paginated_list_view.dart';
 import '../../widgets/status_badge.dart';
 
 class EcheanciersScreen extends StatefulWidget {
@@ -92,10 +94,35 @@ class _EcheanciersScreenState extends State<EcheanciersScreen> {
   }
 }
 
-class _EcheancierListe extends StatelessWidget {
+class _EcheancierListe extends StatefulWidget {
   final List<StatutEcheancier> statuts;
 
   const _EcheancierListe({required this.statuts});
+
+  @override
+  State<_EcheancierListe> createState() => _EcheancierListeState();
+}
+
+class _EcheancierListeState extends State<_EcheancierListe> {
+  final _searchController = TextEditingController();
+  String _query = '';
+  String? _frequence;
+  StatutEcheancier? _statut;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _reinitialiser() {
+    setState(() {
+      _searchController.clear();
+      _query = '';
+      _frequence = null;
+      _statut = null;
+    });
+  }
 
   Color _couleur(StatutEcheancier statut) {
     switch (statut) {
@@ -112,20 +139,89 @@ class _EcheancierListe extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final liste = SnrRepository.instance.echeanciers
-        .where((e) => statuts.contains(e.statut))
+    final source = SnrRepository.instance.echeanciers
+        .where((e) => widget.statuts.contains(e.statut))
         .toList();
-    if (liste.isEmpty) {
+    if (source.isEmpty) {
       return const EmptyPlaceholder(
         message: 'Aucun échéancier dans cette catégorie.',
       );
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(16),
-      itemCount: liste.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) {
-        final e = liste[index];
+    final frequences =
+        source
+            .map((e) => e.frequence)
+            .where((f) => f.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    final filtered = source.where((e) {
+      final matchRecherche =
+          _query.isEmpty ||
+          normalizeText(e.debiteurNom).contains(_query) ||
+          normalizeText(e.creanceId).contains(_query);
+      final matchFrequence = _frequence == null || e.frequence == _frequence;
+      final matchStatut = _statut == null || e.statut == _statut;
+      return matchRecherche && matchFrequence && matchStatut;
+    }).toList();
+
+    return PaginatedListView<Echeancier>(
+      items: filtered,
+      itemLabel: 'échéanciers',
+      emptyMessage: 'Aucun échéancier ne correspond aux filtres.',
+      separatorBuilder: (_) => const SizedBox(height: 8),
+      header: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FilterSearchField(
+            controller: _searchController,
+            hint: 'Rechercher un débiteur ou une référence',
+            onChanged: (value) => setState(() => _query = normalizeText(value)),
+          ),
+          if (widget.statuts.length > 1)
+            FilterChips<StatutEcheancier>(
+              values: widget.statuts,
+              selected: _statut,
+              label: (statut) => statut.libelle,
+              onChanged: (value) => setState(() => _statut = value),
+              allLabel: 'Tous les statuts',
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FilterDropdown<String>(
+                  label: 'Fréquence',
+                  value: _frequence ?? '',
+                  items: [
+                    const DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('Toutes'),
+                    ),
+                    for (final frequence in frequences)
+                      DropdownMenuItem<String>(
+                        value: frequence,
+                        child: Text(frequence),
+                      ),
+                  ],
+                  onChanged: (value) => setState(() {
+                    _frequence = (value == null || value.isEmpty)
+                        ? null
+                        : value;
+                  }),
+                ),
+                TextButton(
+                  onPressed: _reinitialiser,
+                  child: const Text('Réinitialiser'),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      itemBuilder: (context, e) {
         return Card(
           child: ListTile(
             onTap: () => context.push('/echeanciers/${e.id}'),

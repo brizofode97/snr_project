@@ -110,7 +110,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
+                      TextButton(
+                        onPressed: () => context.go('/forgot-password'),
+                        child: const Text('Mot de passe oublié ?'),
+                      ),
+                      const SizedBox(height: 8),
                       const Text(
                         'L\'accès est réservé aux profils SNR autorisés.',
                         textAlign: TextAlign.center,

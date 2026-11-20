@@ -3,8 +3,8 @@ import 'package:material_ui/material_ui.dart';
 import '../../app/theme.dart';
 import '../../core/network/api_client.dart';
 import '../../data/api/creances_api_service.dart';
-import '../../widgets/empty_placeholder.dart';
-import '../../widgets/pagination_bar.dart';
+import '../../widgets/filter_widgets.dart';
+import '../../widgets/paginated_list_view.dart';
 
 class ProfilsScreen extends StatefulWidget {
   const ProfilsScreen({super.key});
@@ -15,13 +15,22 @@ class ProfilsScreen extends StatefulWidget {
 
 class _ProfilsScreenState extends State<ProfilsScreen> {
   late Future<({List<dynamic> profils, Map<String, String> catalogue})> _future;
-  int _page = 0;
-  int _pageSize = 10;
+  final TextEditingController _recherche = TextEditingController();
+  String? _origine;
+  String? _mfa;
+  bool _filtresVisibles = false;
+  int _generation = 0;
 
   @override
   void initState() {
     super.initState();
     _future = _charger();
+  }
+
+  @override
+  void dispose() {
+    _recherche.dispose();
+    super.dispose();
   }
 
   Future<({List<dynamic> profils, Map<String, String> catalogue})>
@@ -40,9 +49,17 @@ class _ProfilsScreenState extends State<ProfilsScreen> {
   }
 
   void _recharger() => setState(() {
-    _page = 0;
+    _generation++;
     _future = _charger();
   });
+
+  void _reinitialiser() {
+    _recherche.clear();
+    setState(() {
+      _origine = null;
+      _mfa = null;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -76,13 +93,30 @@ class _ProfilsScreenState extends State<ProfilsScreen> {
           );
         }
 
-        final profils = snapshot.data?.profils ?? const <dynamic>[];
         final catalogue = snapshot.data?.catalogue ?? const <String, String>{};
-        final pages = profils.isEmpty ? 1 : (profils.length / _pageSize).ceil();
-        final page = _page.clamp(0, pages - 1);
-        final visibles = pageItems(profils, page, _pageSize);
+        final profilsSource = (snapshot.data?.profils ?? const <dynamic>[])
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+        final query = normalizeText(_recherche.text);
+        final profils = profilsSource.where((profil) {
+          final code = (profil['code'] ?? '').toString();
+          final droits = profil['droits'] is List
+              ? (profil['droits'] as List).map((e) => e.toString()).toList()
+              : <String>[];
+          final origine = profil['systeme'] == true ? 'Système' : 'Créé';
+          final mfa = profil['authentificationForte'] == true ? 'Oui' : 'Non';
+          if (_origine != null && origine != _origine) return false;
+          if (_mfa != null && mfa != _mfa) return false;
+          if (query.isEmpty) return true;
+          final droitsTexte = droits.map((d) => catalogue[d] ?? d).join(' ');
+          return normalizeText(
+            '${profil['libelle'] ?? ''} $code $origine $droitsTexte',
+          ).contains(query);
+        }).toList();
 
-        return Column(
+        final header = Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
@@ -105,105 +139,115 @@ class _ProfilsScreenState extends State<ProfilsScreen> {
                 ],
               ),
             ),
-            Expanded(
-              child: visibles.isEmpty
-                  ? const EmptyPlaceholder(message: 'Aucun profil configuré.')
-                  : ListView.separated(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: visibles.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final profil = visibles[index] is Map
-                            ? Map<String, dynamic>.from(visibles[index] as Map)
-                            : <String, dynamic>{};
-                        final code = (profil['code'] ?? '').toString();
-                        final droits = profil['droits'] is List
-                            ? (profil['droits'] as List)
-                                  .map((e) => e.toString())
-                                  .toList()
-                            : <String>[];
-                        final origine = profil['systeme'] == true
-                            ? (profil['verrouille'] == true
-                                  ? 'Système · droits fixes'
-                                  : 'Système')
-                            : 'Créé';
-                        return Card(
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor: snrPrimary.withValues(
-                                    alpha: 0.12,
-                                  ),
-                                  child: Text(
-                                    code.isEmpty
-                                        ? '?'
-                                        : code.substring(0, 1).toUpperCase(),
-                                    style: const TextStyle(color: snrPrimary),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        (profil['libelle'] ?? code).toString(),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        <String>[
-                                          code,
-                                          origine,
-                                          if (profil['authentificationForte'] ==
-                                              true)
-                                            'MFA',
-                                          '${droits.length} droit(s)',
-                                          '${profil['utilisateurs'] ?? '—'} compte(s)',
-                                        ].join(' · '),
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey.shade700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                IconButton(
-                                  tooltip: 'Voir les détails',
-                                  icon: const Icon(Icons.visibility_outlined),
-                                  onPressed: () => _ouvrirDetails(
-                                    context,
-                                    profil,
-                                    droits,
-                                    catalogue,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+            FilterSearchField(
+              controller: _recherche,
+              hint: 'Libellé, code, droit…',
+              onChanged: (_) => setState(() {}),
             ),
-            PaginationBar(
-              page: page,
-              pageSize: _pageSize,
-              total: profils.length,
-              itemLabel: 'profil(s)',
-              onPageChanged: (value) => setState(() => _page = value),
-              onPageSizeChanged: (value) => setState(() {
-                _pageSize = value;
-                _page = 0;
-              }),
+            FilterChips<String>(
+              values: const <String>['Système', 'Créé'],
+              selected: _origine,
+              label: (value) => value,
+              onChanged: (value) => setState(() => _origine = value),
+            ),
+            FilterPanel(
+              show: _filtresVisibles,
+              onToggle: () =>
+                  setState(() => _filtresVisibles = !_filtresVisibles),
+              onReset: _reinitialiser,
+              children: [
+                FilterDropdown<String?>(
+                  label: 'Authentification forte',
+                  value: _mfa,
+                  width: 200,
+                  items: const [
+                    DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('Toutes'),
+                    ),
+                    DropdownMenuItem<String?>(
+                      value: 'Oui',
+                      child: Text('Oui (OTP)'),
+                    ),
+                    DropdownMenuItem<String?>(value: 'Non', child: Text('Non')),
+                  ],
+                  onChanged: (value) => setState(() => _mfa = value),
+                ),
+              ],
             ),
           ],
+        );
+
+        return PaginatedListView<Map<String, dynamic>>(
+          key: ValueKey(_generation),
+          items: profils,
+          itemLabel: 'profil(s)',
+          emptyMessage: profilsSource.isEmpty
+              ? 'Aucun profil configuré.'
+              : 'Aucun profil ne correspond aux filtres.',
+          header: header,
+          padding: const EdgeInsets.all(16),
+          itemBuilder: (context, profil) {
+            final code = (profil['code'] ?? '').toString();
+            final droits = profil['droits'] is List
+                ? (profil['droits'] as List).map((e) => e.toString()).toList()
+                : <String>[];
+            final origine = profil['systeme'] == true
+                ? (profil['verrouille'] == true
+                      ? 'Système · droits fixes'
+                      : 'Système')
+                : 'Créé';
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: snrPrimary.withValues(alpha: 0.12),
+                      child: Text(
+                        code.isEmpty ? '?' : code.substring(0, 1).toUpperCase(),
+                        style: const TextStyle(color: snrPrimary),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (profil['libelle'] ?? code).toString(),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            <String>[
+                              code,
+                              origine,
+                              if (profil['authentificationForte'] == true)
+                                'MFA',
+                              '${droits.length} droit(s)',
+                              '${profil['utilisateurs'] ?? '—'} compte(s)',
+                            ].join(' · '),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Voir les détails',
+                      icon: const Icon(Icons.visibility_outlined),
+                      onPressed: () =>
+                          _ouvrirDetails(context, profil, droits, catalogue),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );

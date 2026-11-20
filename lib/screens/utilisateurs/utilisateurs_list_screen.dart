@@ -4,7 +4,8 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/network/api_client.dart';
 import '../../data/snr_repository.dart';
 import '../../models/utilisateur.dart';
-import '../../widgets/empty_placeholder.dart';
+import '../../widgets/filter_widgets.dart';
+import '../../widgets/paginated_list_view.dart';
 import '../../widgets/status_badge.dart';
 
 class UtilisateursListScreen extends StatefulWidget {
@@ -17,11 +18,29 @@ class UtilisateursListScreen extends StatefulWidget {
 class _UtilisateursListScreenState extends State<UtilisateursListScreen> {
   late Future<void> _future;
   final _repo = SnrRepository.instance;
+  final _recherche = TextEditingController();
+  ProfilUtilisateur? _profil;
+  bool? _actif;
+  bool _filtresVisibles = false;
 
   @override
   void initState() {
     super.initState();
     _future = _repo.utilisateurs.isEmpty ? _repo.refreshAll() : Future.value();
+  }
+
+  @override
+  void dispose() {
+    _recherche.dispose();
+    super.dispose();
+  }
+
+  void _reinitialiser() {
+    _recherche.clear();
+    setState(() {
+      _profil = null;
+      _actif = null;
+    });
   }
 
   @override
@@ -55,32 +74,80 @@ class _UtilisateursListScreenState extends State<UtilisateursListScreen> {
           );
         }
 
-        final utilisateurs = _repo.utilisateurs;
-        return Scaffold(
-          body: utilisateurs.isEmpty
-              ? const EmptyPlaceholder(message: 'Aucun utilisateur.')
-              : ListView.separated(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: utilisateurs.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (context, index) {
-                    final u = utilisateurs[index];
-                    return Card(
-                      child: ListTile(
-                        onTap: () => context.push('/utilisateurs/${u.id}'),
-                        leading: CircleAvatar(
-                          child: Text(u.prenom.characters.first),
-                        ),
-                        title: Text('${u.prenom} ${u.nom}'),
-                        subtitle: Text('${u.profil.libelle} · ${u.email}'),
-                        trailing: StatusBadge(
-                          label: u.actif ? 'Actif' : 'Inactif',
-                          color: u.actif ? Colors.green : Colors.red,
-                        ),
+        final query = normalizeText(_recherche.text);
+        final utilisateurs = _repo.utilisateurs.where((u) {
+          if (_profil != null && u.profil != _profil) return false;
+          if (_actif != null && u.actif != _actif) return false;
+          if (query.isEmpty) return true;
+          return normalizeText(
+            '${u.prenom} ${u.nom} ${u.email} ${u.profil.libelle}',
+          ).contains(query);
+        }).toList();
+
+        final header = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FilterSearchField(
+              controller: _recherche,
+              hint: 'Nom, prénom, e-mail, profil…',
+              onChanged: (_) => setState(() {}),
+            ),
+            FilterChips<bool>(
+              values: const <bool>[true, false],
+              selected: _actif,
+              label: (value) => value ? 'Actif' : 'Inactif',
+              onChanged: (value) => setState(() => _actif = value),
+            ),
+            FilterPanel(
+              show: _filtresVisibles,
+              onToggle: () =>
+                  setState(() => _filtresVisibles = !_filtresVisibles),
+              onReset: _reinitialiser,
+              children: [
+                FilterDropdown<ProfilUtilisateur?>(
+                  label: 'Profil',
+                  value: _profil,
+                  width: 180,
+                  items: [
+                    const DropdownMenuItem<ProfilUtilisateur?>(
+                      value: null,
+                      child: Text('Tous les profils'),
+                    ),
+                    for (final profil in ProfilUtilisateur.values)
+                      DropdownMenuItem<ProfilUtilisateur?>(
+                        value: profil,
+                        child: Text(profil.libelle),
                       ),
-                    );
-                  },
+                  ],
+                  onChanged: (value) => setState(() => _profil = value),
                 ),
+              ],
+            ),
+          ],
+        );
+
+        return Scaffold(
+          body: PaginatedListView<Utilisateur>(
+            items: utilisateurs,
+            itemLabel: 'utilisateur(s)',
+            emptyMessage: 'Aucun utilisateur.',
+            header: header,
+            padding: const EdgeInsets.all(16),
+            itemBuilder: (context, u) {
+              return Card(
+                child: ListTile(
+                  onTap: () => context.push('/utilisateurs/${u.id}'),
+                  leading: CircleAvatar(child: Text(u.prenom.characters.first)),
+                  title: Text('${u.prenom} ${u.nom}'),
+                  subtitle: Text('${u.profil.libelle} · ${u.email}'),
+                  trailing: StatusBadge(
+                    label: u.actif ? 'Actif' : 'Inactif',
+                    color: u.actif ? Colors.green : Colors.red,
+                  ),
+                ),
+              );
+            },
+          ),
           floatingActionButton: FloatingActionButton(
             onPressed: () => context.push('/utilisateurs/nouveau'),
             tooltip: 'Nouvel utilisateur',
